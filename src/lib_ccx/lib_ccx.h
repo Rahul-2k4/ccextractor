@@ -107,6 +107,7 @@ struct lib_ccx_ctx
 	int pes_header_to_stdout;	// If 1, PES Header data will be outputted to console
 	int dvb_debug_traces_to_stdout; // If 1, DVB subtitle debug traces will be outputted to console
 	int ignore_pts_jumps;		// If 1, the program will ignore PTS jumps. Sometimes this parameter is required for DVB subs with > 30s pause time
+	int split_dvb_subs;		// If 1, split DVB subtitles by stream
 
 	LLONG subs_delay; // ms to delay (or advance) subs
 

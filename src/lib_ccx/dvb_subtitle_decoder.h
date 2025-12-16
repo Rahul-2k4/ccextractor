@@ -45,6 +45,11 @@ typedef struct ccx_decoders_dvb_context
     // Dependencies
     struct ccx_common_timing_ctx *timing;
     struct encoder_ctx *encoder;
+    
+    // Add these missing fields:
+    void *private_data;              // Internal DVBSubContext
+    struct dvb_config *cfg;          // Configuration
+    int initialized_ocr;             // OCR initialization flag
 } ccx_decoders_dvb_context;
 
 	struct dvb_config

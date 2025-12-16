@@ -467,6 +467,7 @@ struct demuxer_data *search_or_alloc_demuxer_data_node_by_pid(struct demuxer_dat
 		*data = alloc_demuxer_data();
 		(*data)->program_number = -1;
 		(*data)->stream_pid = pid;
+		(*data)->pid = pid; // Set pid field
 		(*data)->bufferdatatype = CCX_UNKNOWN;
 		(*data)->len = 0;
 		(*data)->next_program = NULL;
@@ -489,6 +490,7 @@ struct demuxer_data *search_or_alloc_demuxer_data_node_by_pid(struct demuxer_dat
 	ptr = sptr->next_stream;
 	ptr->program_number = -1;
 	ptr->stream_pid = pid;
+	ptr->pid = pid; // Set pid field
 	ptr->bufferdatatype = CCX_UNKNOWN;
 	ptr->len = 0;
 	ptr->next_program = NULL;

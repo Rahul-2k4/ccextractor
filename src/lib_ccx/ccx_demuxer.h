@@ -7,6 +7,9 @@
 #include "activity.h"
 #include "utility.h"
 
+// Forward declaration for DVB decoder context
+struct ccx_decoders_dvb_context;
+
 // [ADD THESE DEFINITIONS]
 #define MAX_POTENTIAL_STREAMS 64
 #define CCX_STREAM_TYPE_UNKNOWN 0
@@ -19,6 +22,8 @@ struct ccx_stream_metadata
     int stream_type; // Logical type (CCX_STREAM_TYPE_*)
     int mpeg_type;   // Raw MPEG type (0x06)
     char lang[4];    // ISO 639-2
+    char language[4]; // Language code (duplicate for compatibility)
+    struct ccx_decoders_dvb_context *dvb_decoder_ctx; // DVB decoder context for multi-stream
 };
 
 /* Report information */
@@ -77,6 +82,7 @@ struct cap_info
 	int prev_counter;
 	void *codec_private_data;
 	int ignore;
+	char language[4]; // Language code for the stream
 
 	/**
 	  List joining all stream in TS
@@ -187,6 +193,7 @@ struct demuxer_data
 {
 	int program_number;
 	int stream_pid;
+	int pid; // PID for multi-stream support (same as stream_pid)
 	enum ccx_code_type codec;
 	enum ccx_bufferdata_type bufferdatatype;
 	unsigned char *buffer;

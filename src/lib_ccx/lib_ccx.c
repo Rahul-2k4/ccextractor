@@ -182,6 +182,7 @@ struct lib_ccx_ctx *init_libraries(struct ccx_s_options *opt)
 	ctx->cc_to_stdout = opt->cc_to_stdout;
 	ctx->pes_header_to_stdout = opt->pes_header_to_stdout;
 	ctx->ignore_pts_jumps = opt->ignore_pts_jumps;
+	ctx->split_dvb_subs = opt->split_dvb_subs;
 
 	ctx->hauppauge_mode = opt->hauppauge_mode;
 	ctx->live_stream = opt->live_stream;
@@ -495,7 +496,7 @@ struct encoder_ctx *update_encoder_list(struct lib_ccx_ctx *ctx)
 
 int init_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
 {
-	if (!ctx->options.split_dvb_subs)
+	if (!ctx->split_dvb_subs)
 		return 0;  // Multi-stream mode not enabled
 	
 	mprint("Initializing DVB multi-stream pipeline\n");
@@ -508,7 +509,7 @@ int init_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
 
 void cleanup_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
 {
-	if (!ctx->options.split_dvb_subs)
+	if (!ctx->split_dvb_subs)
 		return;
 	
 	mprint("Cleaning up DVB multi-stream pipeline\n");
@@ -521,14 +522,14 @@ void cleanup_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
 		if (stream->stream_type == CCX_STREAM_TYPE_DVB_SUB && stream->dvb_decoder_ctx)
 		{
 			mprint("Cleaning up DVB decoder for stream PID 0x%x\n", stream->pid);
-			dvb_free_decoder(&stream->dvb_decoder_ctx);
+			dvb_free_decoder(stream->dvb_decoder_ctx);
 		}
 	}
 }
 
 int process_dvb_multi_stream(struct lib_ccx_ctx *ctx, struct demuxer_data *data, struct cc_subtitle *sub)
 {
-	if (!ctx->options.split_dvb_subs)
+	if (!ctx->split_dvb_subs)
 		return 0;  // Multi-stream mode not enabled
 	
 	// Find the stream metadata for this PID
@@ -564,14 +565,7 @@ int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metad
 		mprint("Creating DVB decoder for stream PID 0x%x (lang: %s)\n", 
 		       stream->pid, stream->language[0] ? stream->language : "unknown");
 		
-		// Create DVB config for this specific stream
-		struct dvb_config cfg;
-		memset(&cfg, 0, sizeof(cfg));
-		cfg.composition_id[0] = 1;  // Default composition ID
-		cfg.ancillary_id[0] = 1;    // Default ancillary ID
-		cfg.lang_index[0] = 1;      // Default language index
-		
-		stream->dvb_decoder_ctx = dvb_init_decoder(&cfg, 0);
+		stream->dvb_decoder_ctx = dvb_init_decoder(NULL, NULL);
 		if (!stream->dvb_decoder_ctx)
 		{
 			mprint("Failed to create DVB decoder for stream PID 0x%x\n", stream->pid);
@@ -592,7 +586,8 @@ int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metad
 	memset(&cinfo, 0, sizeof(cinfo));
 	cinfo.pid = stream->pid;
 	cinfo.codec = CCX_CODEC_DVB;
-	strcpy(cinfo.language, stream->language);
+	strncpy(cinfo.language, stream->language, sizeof(cinfo.language) - 1);
+	cinfo.language[sizeof(cinfo.language) - 1] = '\0';
 	
 	struct encoder_ctx *enc_ctx = update_encoder_list_cinfo(ctx, &cinfo);
 	if (!enc_ctx)
@@ -602,5 +597,6 @@ int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metad
 	}
 	
 	// Decode the DVB subtitle data using the stream-specific decoder
-	return dvb_decode(stream->dvb_decoder_ctx, enc_ctx, dec_ctx, buf, buf_size, sub);
+	dvb_decode(stream->dvb_decoder_ctx, (unsigned char *)buf, buf_size, sub);
+	return 0;
 }

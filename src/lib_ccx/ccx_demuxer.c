@@ -436,6 +436,7 @@ struct demuxer_data *alloc_demuxer_data(void)
 
 	data->program_number = -1;
 	data->stream_pid = -1;
+	data->pid = -1; // Initialize pid field
 	data->codec = CCX_CODEC_NONE;
 	data->len = 0;
 	data->pts = CCX_NOPTS;
