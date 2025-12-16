@@ -564,18 +564,18 @@ int dvbsub_close_decoder(void **dvb_ctx)
 struct ccx_decoders_dvb_context *dvb_init_decoder(struct ccx_common_timing_ctx *timing, struct encoder_ctx *encoder)
 {
 	struct ccx_decoders_dvb_context *dvb_ctx;
-	
+
 	dvb_ctx = (struct ccx_decoders_dvb_context *)malloc(sizeof(struct ccx_decoders_dvb_context));
 	if (!dvb_ctx)
 	{
 		fatal(EXIT_NOT_ENOUGH_MEMORY, "In dvb_init_decoder: Out of memory for context.");
 	}
 	memset(dvb_ctx, 0, sizeof(struct ccx_decoders_dvb_context));
-	
+
 	// Store timing and encoder contexts
 	dvb_ctx->timing = timing;
 	dvb_ctx->encoder = encoder;
-	
+
 	return dvb_ctx;
 }
 
@@ -583,14 +583,14 @@ void dvb_free_decoder(struct ccx_decoders_dvb_context *dvb_ctx)
 {
 	if (!dvb_ctx)
 		return;
-	
+
 	// Free the internal DVB context using existing function
 	if (dvb_ctx->private_data)
 	{
 		void *ctx = dvb_ctx->private_data;
 		dvbsub_close_decoder(&ctx);
 	}
-	
+
 	free(dvb_ctx);
 }
 
@@ -598,7 +598,7 @@ void dvb_decode(struct ccx_decoders_dvb_context *dvb_ctx, unsigned char *data, i
 {
 	if (!dvb_ctx)
 		return;
-	
+
 	// Implementation for decoding DVB subtitles
 	// This would contain the actual decoding logic
 }

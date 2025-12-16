@@ -83,6 +83,7 @@ mod tests {
             let c_data = Box::into_raw(Box::new(demuxer_data {
                 program_number: 42,
                 stream_pid: 256,
+                pid: 256, // Initialize pid field
                 codec: Codec::Any.to_ctype(),
                 bufferdatatype: ccx_bufferdata_type_CCX_H264,
                 buffer: ptr::null_mut(),

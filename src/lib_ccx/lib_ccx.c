@@ -282,10 +282,10 @@ void dinit_libraries(struct lib_ccx_ctx **ctx)
 	for (i = 0; i < lctx->num_input_files; i++)
 		freep(&lctx->inputfile[i]);
 	freep(&lctx->inputfile);
-	
+
 	// Cleanup DVB multi-stream pipeline
 	cleanup_dvb_multi_stream_pipeline(lctx);
-	
+
 	freep(ctx);
 }
 
@@ -497,13 +497,13 @@ struct encoder_ctx *update_encoder_list(struct lib_ccx_ctx *ctx)
 int init_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
 {
 	if (!ctx->split_dvb_subs)
-		return 0;  // Multi-stream mode not enabled
-	
+		return 0; // Multi-stream mode not enabled
+
 	mprint("Initializing DVB multi-stream pipeline\n");
-	
+
 	// Initialize the registry arrays if needed
 	// The actual stream contexts will be created on-demand when streams are discovered
-	
+
 	return 0;
 }
 
@@ -511,14 +511,14 @@ void cleanup_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
 {
 	if (!ctx->split_dvb_subs)
 		return;
-	
+
 	mprint("Cleaning up DVB multi-stream pipeline\n");
-	
+
 	// Clean up any registered DVB decoder contexts
 	for (int i = 0; i < ctx->demux_ctx->potential_stream_count; i++)
 	{
 		struct ccx_stream_metadata *stream = &ctx->demux_ctx->potential_streams[i];
-		
+
 		if (stream->stream_type == CCX_STREAM_TYPE_DVB_SUB && stream->dvb_decoder_ctx)
 		{
 			mprint("Cleaning up DVB decoder for stream PID 0x%x\n", stream->pid);
@@ -530,41 +530,41 @@ void cleanup_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
 int process_dvb_multi_stream(struct lib_ccx_ctx *ctx, struct demuxer_data *data, struct cc_subtitle *sub)
 {
 	if (!ctx->split_dvb_subs)
-		return 0;  // Multi-stream mode not enabled
-	
+		return 0; // Multi-stream mode not enabled
+
 	// Find the stream metadata for this PID
 	struct ccx_stream_metadata *target_stream = NULL;
-	
+
 	for (int i = 0; i < ctx->demux_ctx->potential_stream_count; i++)
 	{
 		struct ccx_stream_metadata *stream = &ctx->demux_ctx->potential_streams[i];
-		
+
 		if (stream->pid == data->pid && stream->stream_type == CCX_STREAM_TYPE_DVB_SUB)
 		{
 			target_stream = stream;
 			break;
 		}
 	}
-	
+
 	if (!target_stream)
 	{
 		// Stream not found in registry - this shouldn't happen if PMT parsing worked correctly
 		mprint("Warning: DVB stream PID 0x%x not found in stream registry\n", data->pid);
 		return -1;
 	}
-	
+
 	return route_dvb_stream_to_decoder(ctx, target_stream, data->buffer, data->len, sub);
 }
 
-int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metadata *stream, 
-                                const unsigned char *buf, int buf_size, struct cc_subtitle *sub)
+int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metadata *stream,
+				const unsigned char *buf, int buf_size, struct cc_subtitle *sub)
 {
 	// Create decoder context on-demand if not already created
 	if (!stream->dvb_decoder_ctx)
 	{
-		mprint("Creating DVB decoder for stream PID 0x%x (lang: %s)\n", 
+		mprint("Creating DVB decoder for stream PID 0x%x (lang: %s)\n",
 		       stream->pid, stream->language[0] ? stream->language : "unknown");
-		
+
 		stream->dvb_decoder_ctx = dvb_init_decoder(NULL, NULL);
 		if (!stream->dvb_decoder_ctx)
 		{
@@ -572,7 +572,7 @@ int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metad
 			return -1;
 		}
 	}
-	
+
 	// Get decoder and encoder contexts
 	struct lib_cc_decode *dec_ctx = update_decoder_list(ctx);
 	if (!dec_ctx)
@@ -580,7 +580,7 @@ int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metad
 		mprint("Failed to get decoder context for DVB stream PID 0x%x\n", stream->pid);
 		return -1;
 	}
-	
+
 	// Create encoder context for this specific stream if needed
 	struct cap_info cinfo;
 	memset(&cinfo, 0, sizeof(cinfo));
@@ -588,14 +588,14 @@ int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metad
 	cinfo.codec = CCX_CODEC_DVB;
 	strncpy(cinfo.language, stream->language, sizeof(cinfo.language) - 1);
 	cinfo.language[sizeof(cinfo.language) - 1] = '\0';
-	
+
 	struct encoder_ctx *enc_ctx = update_encoder_list_cinfo(ctx, &cinfo);
 	if (!enc_ctx)
 	{
 		mprint("Failed to get encoder context for DVB stream PID 0x%x\n", stream->pid);
 		return -1;
 	}
-	
+
 	// Decode the DVB subtitle data using the stream-specific decoder
 	dvb_decode(stream->dvb_decoder_ctx, (unsigned char *)buf, buf_size, sub);
 	return 0;
