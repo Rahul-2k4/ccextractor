@@ -187,6 +187,7 @@ struct demuxer_data
 {
 	int program_number;
 	int stream_pid;
+	int pid;
 	enum ccx_code_type codec;
 	enum ccx_bufferdata_type bufferdatatype;
 	unsigned char *buffer;

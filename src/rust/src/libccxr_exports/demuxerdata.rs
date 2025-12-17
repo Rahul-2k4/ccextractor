@@ -17,6 +17,7 @@ pub unsafe fn copy_demuxer_data_to_rust(c_data: *const demuxer_data) -> DemuxerD
     DemuxerData {
         program_number: (*c_data).program_number as i32,
         stream_pid: (*c_data).stream_pid as i32,
+        pid: (*c_data).pid as i32,
         codec: Codec::from_ctype((*c_data).codec),
         bufferdatatype: BufferdataType::from_ctype((*c_data).bufferdatatype)
             .unwrap_or(BufferdataType::Unknown),
@@ -39,6 +40,7 @@ pub unsafe fn copy_demuxer_data_to_rust(c_data: *const demuxer_data) -> DemuxerD
 pub unsafe fn copy_demuxer_data_from_rust(c_data: *mut demuxer_data, rust_data: &DemuxerData) {
     (*c_data).program_number = rust_data.program_number as c_int;
     (*c_data).stream_pid = rust_data.stream_pid as c_int;
+    (*c_data).pid = rust_data.pid as c_int;
     if let Some(codec) = rust_data.codec {
         (*c_data).codec = codec.to_ctype();
     }
@@ -66,6 +68,7 @@ mod tests {
 
         assert_eq!(default_data.program_number, -1);
         assert_eq!(default_data.stream_pid, -1);
+        assert_eq!(default_data.pid, -1);
         assert_eq!(default_data.codec, None);
         assert_eq!(default_data.bufferdatatype, BufferdataType::Pes);
         assert!(default_data.buffer.is_null());
@@ -83,6 +86,7 @@ mod tests {
             let c_data = Box::into_raw(Box::new(demuxer_data {
                 program_number: 42,
                 stream_pid: 256,
+                pid: 256,
                 codec: Codec::Any.to_ctype(),
                 bufferdatatype: ccx_bufferdata_type_CCX_H264,
                 buffer: ptr::null_mut(),
@@ -190,6 +194,7 @@ mod tests {
         let c_data = demuxer_data {
             program_number: 100,
             stream_pid: 200,
+            pid: 200,
             codec: unsafe { Codec::Any.to_ctype() },
             bufferdatatype: crate::bindings::ccx_bufferdata_type_CCX_PES,
             buffer: ptr::null_mut(),
@@ -215,6 +220,7 @@ mod tests {
         let rust_data = DemuxerData {
             program_number: 999,
             stream_pid: 888,
+            pid: 888,
             codec: Some(Codec::Any),
             bufferdatatype: BufferdataType::Raw,
             buffer: test_buffer.as_mut_ptr(),
@@ -232,6 +238,7 @@ mod tests {
             demuxer_data {
                 program_number: 0,
                 stream_pid: 0,
+                pid: 0,
                 codec: Codec::Any.to_ctype(),
                 bufferdatatype: crate::bindings::ccx_bufferdata_type_CCX_PES,
                 buffer: c_buffer.as_mut_ptr(),

@@ -8,6 +8,7 @@ use std::ptr::null_mut;
 pub struct DemuxerData {
     pub program_number: i32,
     pub stream_pid: i32,
+    pub pid: i32,
     pub codec: Option<Codec>,           // ccx_code_type maps to Codec
     pub bufferdatatype: BufferdataType, // ccx_bufferdata_type maps to BufferDataType
     pub buffer: *mut u8,
@@ -24,6 +25,7 @@ impl Default for DemuxerData {
         DemuxerData {
             program_number: -1,
             stream_pid: -1,
+            pid: -1,
             codec: None,                         // CCX_CODEC_NONE
             bufferdatatype: BufferdataType::Pes, // CCX_PES
             buffer: null_mut(),                  // empty slice
