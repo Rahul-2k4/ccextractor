@@ -161,3 +161,21 @@ plans/
 tess.log
 **/tess.log
 ut=srt*
+
+# Test summaries and arte output
+main_branch_issue_447_summary.txt
+feature_branch_issue_447_summary.txt
+arte_feature_branch_output.txt
+tests/samples/arte_multiaudio.srt
+tests/samples/arte_multiaudio.xml
+tests/samples/arte_multiaudio.d/
+feature_run.log
+build_mingw/
+
+# Local codebase summary
+CODEBASE_SUMMARY.md
+
+# Agent & Temp files
+GEMINI.md
+build_master/
+logs/
