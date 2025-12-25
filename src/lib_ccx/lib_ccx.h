@@ -13,6 +13,15 @@
 #include "ccx_common_option.h"
 #include <limits.h>
 
+#ifndef _WIN32
+#include <pthread.h>
+#endif
+
+// Ensure PATH_MAX is defined for all platforms
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 #include "ccx_demuxer.h"
 #include "ccx_encoders_common.h"
 #include "ccx_decoders_common.h"
@@ -135,7 +144,9 @@ struct lib_ccx_ctx
     
     // [NEW PIPELINE REGISTRY]
     struct ccx_subtitle_pipeline pipelines[MAX_DVB_PIPELINES];
+#ifndef _WIN32
     pthread_mutex_t pipeline_mutex;
+#endif
 
     /* pipeline_count REMOVED (no longer needed) */
 	int ignore_pts_jumps;		// If 1, the program will ignore PTS jumps. Sometimes this parameter is required for DVB subs with > 30s pause time

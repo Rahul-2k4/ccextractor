@@ -449,6 +449,8 @@ pub struct Options {
     pub hardsubx: bool,
     /// true if both burned-in and not burned in need to be extracted
     pub hardsubx_and_common: bool,
+    /// If true, split DVB subtitles into separate files per stream
+    pub split_dvb_subs: bool,
     /// The name of the language stream for DVB
     pub dvblang: Option<Language>,
     /// The name of the .traineddata file to be loaded with tesseract
@@ -577,6 +579,7 @@ impl Default for Options {
             tickertext: Default::default(),
             hardsubx: Default::default(),
             hardsubx_and_common: Default::default(),
+            split_dvb_subs: Default::default(),
             dvblang: Default::default(),
             ocrlang: Default::default(),
             ocr_oem: -1,
