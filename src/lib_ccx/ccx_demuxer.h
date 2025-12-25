@@ -95,6 +95,9 @@ struct cap_info
 	*/
 	struct list_head pg_stream;
 };
+struct ccx_demuxer;
+typedef struct ccx_demuxer ccx_demuxer_context;
+
 struct ccx_demuxer
 {
 	int m2ts;
@@ -163,6 +166,15 @@ struct ccx_demuxer
 	// [ADD THESE]
 	struct ccx_stream_metadata potential_streams[MAX_POTENTIAL_STREAMS];
 	int potential_stream_count;
+
+	/* PMT version tracking for updates */
+	int pmt_version;
+
+	/* Global timing context */
+	struct ccx_common_timing_ctx *global_timing;
+
+	/* NOTE: pointer to options so pmt parser can consult split_dvb_subs */
+	struct ccx_s_options *options;
 
 	int warning_program_not_found_shown;
 

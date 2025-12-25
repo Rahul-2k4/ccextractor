@@ -151,6 +151,24 @@ struct lib_ccx_ctx
 	
 	// DVB multi-stream support
 	int split_dvb_subs;  // If 1, extract each DVB stream to a separate file
+    
+    // Pipeline management for multi-stream
+    struct ccx_subtitle_pipeline
+    {
+        int pid;
+        char language[4];
+        int page_id;
+        
+        struct encoder_ctx *encoder;
+        struct lib_cc_decode *dec_ctx;
+        struct ccx_common_timing_ctx *timing;
+        struct ccx_decoders_dvb_context *dvb_ctx;
+        
+        char *filename;
+        int file_created;
+    } *pipelines;
+    int pipeline_count;
+    int pipeline_cap;
 };
 
 struct lib_ccx_ctx *init_libraries(struct ccx_s_options *opt);
@@ -181,6 +199,11 @@ unsigned int ccxr_process_dvdraw(struct lib_cc_decode *ctx, struct cc_subtitle *
 int ccxr_is_dvdraw_header(const unsigned char *buffer, unsigned int len);
 
 int general_loop(struct lib_ccx_ctx *ctx);
+int process_dvb_multi_stream(struct lib_ccx_ctx *ctx, struct demuxer_data *data, struct cc_subtitle *sub);
+int init_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx);
+void cleanup_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx);
+int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metadata *stream, const unsigned char *buf, int buf_size, struct cc_subtitle *sub);
+
 void process_hex(struct lib_ccx_ctx *ctx, char *filename);
 int rcwt_loop(struct lib_ccx_ctx *ctx);
 

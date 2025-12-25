@@ -57,6 +57,7 @@ void init_options(struct ccx_s_options *options)
 	/* MP4 related stuff */
 	options->mp4vidtrack = 0;      // Process the video track even if a CC dedicated track exists.
 	options->extract_chapters = 0; // By default don't extract chapters.
+	options->chapter_format = CCX_CHAPTER_FORMAT_TEXT;
 	/* General stuff */
 	options->usepicorder = 0;	  // Force the use of pic_order_cnt_lsb in AVC/H.264 data streams
 	options->xmltv = 0;		  // 1 = full output. 2 = live output. 3 = both

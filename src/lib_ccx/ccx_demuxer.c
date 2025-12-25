@@ -399,6 +399,10 @@ struct ccx_demuxer *init_demuxer(void *parent, struct demuxer_cfg *cfg)
 
 	// [ADD THIS]
 	ctx->potential_stream_count = 0;
+	memset(ctx->potential_streams, 0, sizeof(ctx->potential_streams));
+	ctx->pmt_version = -1; /* Invalid version initially */
+	ctx->global_timing = NULL;
+	ctx->options = NULL;
 
 	memset(&ctx->freport, 0, sizeof(ctx->freport));
 

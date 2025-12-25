@@ -6,6 +6,9 @@
 #include "ccx_encoders_structs.h"
 #include "list.h"
 
+#define CCX_CHAPTER_FORMAT_TEXT 0
+#define CCX_CHAPTER_FORMAT_XML 1
+
 struct demuxer_cfg
 {
 	int m2ts; // Regular TS or M2TS
@@ -100,7 +103,7 @@ struct ccx_s_options // Options from user parameters
 	struct ccx_boundary_time extraction_start, extraction_end; // Segment we actually process
 	
 	// [ADD THIS]
-	int split_dvb_subs; // If 1, extract each DVB stream to a separate file
+	unsigned char split_dvb_subs; // If 1, extract each DVB stream to a separate file
 	
 	int print_file_reports;
 
@@ -135,6 +138,7 @@ struct ccx_s_options // Options from user parameters
 	/* MP4 related stuff */
 	unsigned mp4vidtrack; // Process the video track even if a CC dedicated track exists.
 	int extract_chapters; // If 1, extracts chapters (if present), from MP4 files.
+	int chapter_format;
 	/* General settings */
 	int usepicorder;	 // Force the use of pic_order_cnt_lsb in AVC/H.264 data streams
 	int xmltv;		 // 1 = full output. 2 = live output. 3 = both

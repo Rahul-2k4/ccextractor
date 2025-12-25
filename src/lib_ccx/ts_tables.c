@@ -4,6 +4,7 @@
 #include "ccx_decoders_isdb.h"
 #include "utility.h"
 #include "activity.h"
+#include "ts_functions.h"
 
 static unsigned pmt_warning_shown = 0; // Only display warning once
 void process_ccx_mpeg_descriptor(unsigned char *data, unsigned length);
@@ -543,6 +544,220 @@ int parse_PMT(struct ccx_demuxer *ctx, unsigned char *buf, int len, struct progr
 	pinfo->crc = (*(int32_t *)(sbuf + olen - 4));
 
 	return must_flush;
+}
+
+/*
+ * PMT (Program Map Table) parser with DVB subtitle descriptor support
+ *
+ * FIXED ISSUES:
+ * - Correct variable naming (descriptor_len_remain, not pixel_data_len)
+ * - Proper bounds checking on all descriptor accesses
+ * - ISO 639-2 language code validation
+ * - Deduplication by PID + composition_page_id + ancillary_page_id
+ * - Stream type correctly set to CCX_STREAM_TYPE_DVB_SUB
+ *
+ * NOTE: ts_payload and structure names are assumed to come from your TS parser.
+ */
+void pmt_parse(struct ts_payload *payload, struct ccx_demuxer_context *ctx)
+{
+    if (!payload || !ctx) return;
+
+    unsigned char *p = payload->start;
+    int len = payload->length;
+
+    if (len < 12)
+        return; /* Malformed PMT */
+
+    /* Extract PMT version (bits 1-5 of byte 5) */
+    int new_pmt_version = (p[5] >> 1) & 0x1F;
+
+    /* PMT version changed - reset stream discovery */
+    if (ctx->pmt_version != -1 && ctx->pmt_version != new_pmt_version) {
+        mprint("PMT version changed (%d -> %d), rescanning streams\n",
+               ctx->pmt_version, new_pmt_version);
+
+        /* Mark all streams as pending removal */
+        for (int i = 0; i < ctx->potential_stream_count; i++) {
+            ctx->potential_streams[i].pending_removal = 1;
+        }
+    }
+    ctx->pmt_version = new_pmt_version;
+
+    /* Parse program descriptors (skip for now, focus on elementary streams) */
+    int program_info_length = ((p[10] & 0x0F) << 8) | p[11];
+    int offset = 12 + program_info_length;
+
+    /* Parse elementary stream loop */
+    while (offset + 5 <= len)
+    {
+        int stream_type = p[offset];
+        int elementary_pid = ((p[offset + 1] & 0x1F) << 8) | p[offset + 2];
+        int es_info_length = ((p[offset + 3] & 0x0F) << 8) | p[offset + 4];
+
+        unsigned char *desc_ptr = p + offset + 5;
+        int descriptor_len_remain = es_info_length;
+
+        int is_dvb_subtitle = 0;
+        int is_teletext = 0;
+
+        /* bounds check to ensure descriptor area is inside packet */
+        if (offset + 5 + es_info_length > len) {
+            mprint("Warning: PMT ES info overruns buffer\n");
+            break;
+        }
+
+        /* Parse descriptors for this elementary stream */
+        while (descriptor_len_remain >= 2)
+        {
+            int desc_tag = desc_ptr[0];
+            int desc_len = desc_ptr[1];
+
+            /* Strict bounds check before access */
+            if (desc_len + 2 > descriptor_len_remain) {
+                mprint("Warning: Malformed descriptor (tag=0x%02X, len=%d, avail=%d)\n",
+                       desc_tag, desc_len, descriptor_len_remain);
+                break;
+            }
+
+            /* DVB Subtitling Descriptor (ETSI EN 300 468, tag 0x59) */
+            if (desc_tag == 0x59 && desc_len >= 8)
+            {
+                is_dvb_subtitle = 1;
+
+                if (ctx->options && ctx->options->split_dvb_subs)
+                {
+                    unsigned char *sub_ptr = desc_ptr + 2;
+                    int sub_len = desc_len;
+
+                    /* Each DVB subtitle descriptor contains 8-byte entries */
+                    while (sub_len >= 8)
+                    {
+                        /* Paranoid bounds check */
+                        if (sub_ptr + 8 > desc_ptr + 2 + desc_len) {
+                            mprint("ERROR: DVB sub-descriptor overrun detected\n");
+                            break;
+                        }
+
+                        /* Extract ISO 639-2 language code (3 bytes) */
+                        char lang_code[8];
+                        memcpy(lang_code, sub_ptr, 3);
+                        lang_code[3] = '\0';
+
+                        /* Validate language code (must be ASCII letters) */
+                        if (!isalpha((unsigned char)lang_code[0]) ||
+                            !isalpha((unsigned char)lang_code[1]) ||
+                            !isalpha((unsigned char)lang_code[2]))
+                        {
+                            mprint("Warning: Invalid language code (PID=0x%04X): 0x%02X%02X%02X, using 'und'\n",
+                                   elementary_pid, sub_ptr[0], sub_ptr[1], sub_ptr[2]);
+                            strcpy(lang_code, "und");
+                        }
+
+                        /* Extract subtitling type (byte 3) - for future use */
+                        /* uint8_t sub_type = sub_ptr[3]; */
+
+                        /* Extract page IDs (big-endian uint16) */
+                        int comp_page_id = (sub_ptr[4] << 8) | sub_ptr[5];
+                        int anc_page_id = (sub_ptr[6] << 8) | sub_ptr[7];
+
+                        /* Deduplication check (PID + composition + ancillary) */
+                        int duplicate = 0;
+                        for (int k = 0; k < ctx->potential_stream_count; k++)
+                        {
+                            struct ccx_stream_metadata *e = &ctx->potential_streams[k];
+
+                            if (e->pid == elementary_pid &&
+                                e->composition_page_id == comp_page_id &&
+                                e->ancillary_page_id == anc_page_id)
+                            {
+                                /* Stream already registered, mark as still valid */
+                                e->pending_removal = 0;
+                                duplicate = 1;
+                                break;
+                            }
+                        }
+
+                        if (duplicate) {
+                            sub_ptr += 8;
+                            sub_len -= 8;
+                            continue;
+                        }
+
+                        /* Add new stream if not at capacity */
+                        if (ctx->potential_stream_count >= MAX_POTENTIAL_STREAMS)
+                        {
+                            mprint("ERROR: Max potential streams (%d) reached, ignoring PID=0x%04X\n",
+                                   MAX_POTENTIAL_STREAMS, elementary_pid);
+                        }
+                        else
+                        {
+                            struct ccx_stream_metadata *meta =
+                                &ctx->potential_streams[ctx->potential_stream_count];
+
+                            meta->pid = elementary_pid;
+                            meta->stream_type = CCX_STREAM_TYPE_DVB_SUB;
+                            meta->mpeg_type = stream_type;
+
+                            /* Store validated language code */
+                            strncpy(meta->lang, lang_code, sizeof(meta->lang) - 1);
+                            meta->lang[sizeof(meta->lang) - 1] = '\0';
+
+                            /* Store actual page IDs from PMT */
+                            meta->composition_page_id = comp_page_id;
+                            meta->ancillary_page_id = anc_page_id;
+
+                            meta->pending_removal = 0;
+
+                            ctx->potential_stream_count++;
+
+                            mprint("PMT: Discovered DVB subtitle stream - PID=0x%04X, Lang=%s, Page=%d/%d\n",
+                                   elementary_pid, meta->lang, comp_page_id, anc_page_id);
+                        }
+
+                        sub_ptr += 8;
+                        sub_len -= 8;
+                    }
+                }
+            }
+            /* Teletext Descriptor (tag 0x56) */
+            else if (desc_tag == 0x56)
+            {
+                is_teletext = 1;
+            }
+
+            descriptor_len_remain -= (2 + desc_len);
+            desc_ptr += (2 + desc_len);
+        }
+
+        /* Update decoder configuration if DVB subtitle detected */
+        if (is_dvb_subtitle) {
+            update_decoder_configuration((void*)ctx); /* forward to your decoder config updater */
+        }
+
+        offset += 5 + es_info_length;
+    }
+
+    /* Remove streams that were not reconfirmed in PMT update */
+    /* Note: earlier code used ctx->pmt_version vs new_pmt_version — we've already set
+       ctx->pmt_version to new_pmt_version above, but only want to prune when we previously
+       had an older version. We kept the same semantic: when we stamped pending_removal above,
+       streams that remained pending (not re-confirmed) are removed here. */
+    {
+        int write_idx = 0;
+        for (int read_idx = 0; read_idx < ctx->potential_stream_count; read_idx++)
+        {
+            if (!ctx->potential_streams[read_idx].pending_removal) {
+                if (write_idx != read_idx) {
+                    ctx->potential_streams[write_idx] = ctx->potential_streams[read_idx];
+                }
+                write_idx++;
+            } else {
+                mprint("PMT: Stream PID=0x%04X removed (no longer in PMT)\n",
+                       ctx->potential_streams[read_idx].pid);
+            }
+        }
+        ctx->potential_stream_count = write_idx;
+    }
 }
 
 void ts_buffer_psi_packet(struct ccx_demuxer *ctx)

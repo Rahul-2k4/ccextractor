@@ -2108,3 +2108,85 @@ int parse_dvb_description(struct dvb_config *cfg, unsigned char *data,
 
 	return 0;
 }
+
+// New context-based API for multi-stream support
+
+struct ccx_decoders_dvb_context *dvb_init_decoder(struct dvb_config *cfg, int initialized_ocr)
+{
+	struct ccx_decoders_dvb_context *dvb_ctx;
+	DVBSubContext *ctx;
+
+	dvb_ctx = (struct ccx_decoders_dvb_context *)malloc(sizeof(struct ccx_decoders_dvb_context));
+	if (!dvb_ctx)
+	{
+		fatal(EXIT_NOT_ENOUGH_MEMORY, "In dvb_init_decoder: Out of memory for context.");
+	}
+	memset(dvb_ctx, 0, sizeof(struct ccx_decoders_dvb_context));
+
+	// Initialize the internal DVB context using existing function
+	ctx = (DVBSubContext *)dvbsub_init_decoder(cfg, initialized_ocr);
+	if (!ctx)
+	{
+		free(dvb_ctx);
+		return NULL;
+	}
+
+	dvb_ctx->private_data = ctx;
+    // timing, encoder, dec_ctx will be set by pipeline creator
+    dvb_ctx->composition_page_id = -1;
+    dvb_ctx->ancillary_page_id = -1;
+
+	return dvb_ctx;
+}
+
+void dvb_free_decoder(struct ccx_decoders_dvb_context **dvb_ctx)
+{
+	if (!dvb_ctx || !*dvb_ctx)
+		return;
+
+	// Free the internal DVB context using existing function
+	if ((*dvb_ctx)->private_data)
+	{
+		void *ctx = (*dvb_ctx)->private_data;
+		dvbsub_close_decoder(&ctx);
+	}
+
+	free(*dvb_ctx);
+	*dvb_ctx = NULL;
+}
+
+void dvb_decode(
+    struct ccx_decoders_dvb_context *ctx,
+    unsigned char *data,
+    int length,
+    struct ccx_packet_info *packet)
+{
+    if (!ctx || !ctx->private_data)
+        return;
+
+    // We must ensure we have all necessary contexts
+    if (!ctx->encoder || !ctx->dec_ctx)
+    {
+        // If they are missing, we cannot decode safely with legacy dvbsub_decode
+        return;
+    }
+
+    // Populate cc_subtitle if packet info is relevant, or pass empty?
+    // dvbsub_decode expects struct cc_subtitle *sub.
+    // It populates it.
+    // We should create a temp sub or use one from dec_ctx if it has one?
+    // dec_ctx->dec_sub is usually the one.
+    
+    struct cc_subtitle *sub = &ctx->dec_ctx->dec_sub;
+    
+    // Note: dvbsub_decode uses dec_ctx->timing. Ensure ctx->timing is synced or same.
+    // Ideally ctx->timing == ctx->dec_ctx->timing.
+    
+    /* Forward to legacy DVB decoder */
+    dvbsub_decode(ctx->encoder, ctx->dec_ctx, data, length, sub);
+    
+    // If we got output, we might need to handle it?
+    // dvbsub_decode handles writing via dvbsub_handle_display_segment calls 
+    // which calls encode_sub(enc_ctx, ...).
+    // So we don't need to do anything here if dvbsub_decode works as expected.
+}

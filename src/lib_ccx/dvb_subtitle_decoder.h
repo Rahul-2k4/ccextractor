@@ -18,6 +18,8 @@
 
 #define MAX_LANGUAGE_PER_DESC 5
 
+struct lib_cc_decode;
+
 #include "lib_ccx.h"
 #include "ccx_common_structs.h"
 #include "ccx_decoders_structs.h"
@@ -30,26 +32,14 @@ extern "C"
 // [ADD: Context structure]
 typedef struct ccx_decoders_dvb_context
 {
-    int page_time;
-    int prev_page_time;
-    int global_x;
-    int global_y;
-    
-    // Internal lists (opaque pointers here, defined in .c)
-    void *page_composition;
-    void *region_composition_list; 
-    void *clut_definition_list;
-    void *object_data_list;
-    void *display_definition;
+    int composition_page_id;      /* Filter packets by this page ID (-1 accept all) */
+    int ancillary_page_id;        /* Secondary page ID (-1 accept all) */
 
-    // Dependencies
-    struct ccx_common_timing_ctx *timing;
-    struct encoder_ctx *encoder;
-    
-    // Internal data for multi-stream support
-    void *private_data;              // Internal DVBSubContext
-    struct dvb_config *cfg;          // Configuration
-    int initialized_ocr;             // OCR initialization flag
+    struct ccx_common_timing_ctx *timing;  /* Per-stream timing */
+    struct encoder_ctx *encoder;           /* Per-stream encoder */
+    struct lib_cc_decode *dec_ctx;         /* Link to generic decoder context */
+
+    void *private_data;           /* Opaque pointer to legacy DVB decoder state */
 } ccx_decoders_dvb_context;
 
 	struct dvb_config
@@ -69,9 +59,12 @@ typedef struct ccx_decoders_dvb_context
 	void dvb_free_decoder(ccx_decoders_dvb_context **dvb_ctx);
 
 	// [MODIFY: Decode signature]
-	int dvb_decode(ccx_decoders_dvb_context *dvb_ctx, struct encoder_ctx *enc_ctx, 
-	               struct lib_cc_decode *dec_ctx, const unsigned char *buf, int buf_size, 
-	               struct cc_subtitle *sub);
+	// [MODIFY: Decode signature]
+	void dvb_decode(
+		ccx_decoders_dvb_context *ctx,
+		unsigned char *data,
+		int length,
+		struct ccx_packet_info *packet);
 
 	// Legacy API (kept for compatibility)
 	/**

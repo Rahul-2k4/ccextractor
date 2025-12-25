@@ -148,6 +148,12 @@ struct lib_ccx_ctx *init_libraries(struct ccx_s_options *opt)
 
 	// Init shared decoder settings
 	ctx->dec_global_setting = init_decoder_setting(opt);
+    
+    // Init DVB split options
+    ctx->split_dvb_subs = opt->split_dvb_subs;
+    ctx->pipelines = NULL;
+    ctx->pipeline_count = 0;
+    ctx->pipeline_cap = 0;
 	if (!ctx->dec_global_setting)
 	{
 		free(report_608);
@@ -565,13 +571,22 @@ int process_dvb_multi_stream(struct lib_ccx_ctx *ctx, struct demuxer_data *data,
 	return route_dvb_stream_to_decoder(ctx, target_stream, data->buffer + 2, data->len - 2, sub);
 }
 
+static struct ccx_subtitle_pipeline *get_or_create_pipeline(struct lib_ccx_ctx *ctx, int pid, const char *lang, int page_id);
+
 int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metadata *stream,
 				const unsigned char *buf, int buf_size, struct cc_subtitle *sub)
 {
-	// Create decoder context on-demand if not already created
-	if (!stream->dvb_decoder_ctx)
+    // Use pipeline management to get the context for this stream
+    // Using page_id 1 as default for now, matching init logic.
+    // If we parsed page_id from packet here, we could pass it.
+    struct ccx_subtitle_pipeline *pipeline = get_or_create_pipeline(ctx, stream->pid, stream->lang, 1);
+    if (!pipeline)
+        return -1;
+
+	// Create decoder context on-demand if not already created in pipeline
+	if (!pipeline->dvb_ctx)
 	{
-		mprint("Creating DVB decoder for stream PID 0x%x (lang: %s)\n",
+		mprint("Creating DVB decoder for pipeline PID 0x%x (lang: %s)\n",
 		       stream->pid, stream->lang[0] ? stream->lang : "unknown");
 
 		// Create DVB config for this specific stream
@@ -581,36 +596,121 @@ int route_dvb_stream_to_decoder(struct lib_ccx_ctx *ctx, struct ccx_stream_metad
 		cfg.ancillary_id[0] = 1;   // Default ancillary ID
 		cfg.lang_index[0] = 1;	   // Default language index
 
-		stream->dvb_decoder_ctx = dvb_init_decoder(&cfg, 0);
-		if (!stream->dvb_decoder_ctx)
+		pipeline->dvb_ctx = dvb_init_decoder(&cfg, 0);
+		if (!pipeline->dvb_ctx)
 		{
 			mprint("Failed to create DVB decoder for stream PID 0x%x\n", stream->pid);
 			return -1;
 		}
 	}
 
-	// Get decoder and encoder contexts
-	struct lib_cc_decode *dec_ctx = update_decoder_list(ctx);
-	if (!dec_ctx)
-	{
-		mprint("Failed to get decoder context for DVB stream PID 0x%x\n", stream->pid);
-		return -1;
-	}
+	// Get generic decoder and encoder contexts (managed by main loop or created here?)
+    // In multi-stream, we might need unique generic dec_ctx per stream to avoid race/mix?
+    // Current route_dvb logic used 'update_decoder_list' which reuses/cycles?
+    // Let's reuse the logic but store it in pipeline.
+    
+    if (!pipeline->dec_ctx)
+    {
+	    pipeline->dec_ctx = update_decoder_list(ctx);
+        if (!pipeline->dec_ctx)
+        {
+            mprint("Failed to get decoder context for DVB stream PID 0x%x\n", stream->pid);
+            return -1;
+        }
+    }
 
-	// Create encoder context for this specific stream if needed
-	struct cap_info cinfo;
-	memset(&cinfo, 0, sizeof(cinfo));
-	cinfo.pid = stream->pid;
-	cinfo.codec = CCX_CODEC_DVB;
-	strcpy(cinfo.language, stream->lang);
+    if (!pipeline->encoder)
+    {
+        // Create encoder context for this specific stream if needed
+        struct cap_info cinfo;
+        memset(&cinfo, 0, sizeof(cinfo));
+        cinfo.pid = stream->pid;
+        cinfo.codec = CCX_CODEC_DVB;
+        strcpy(cinfo.language, stream->lang);
 
-	struct encoder_ctx *enc_ctx = update_encoder_list_cinfo(ctx, &cinfo);
-	if (!enc_ctx)
-	{
-		mprint("Failed to get encoder context for DVB stream PID 0x%x\n", stream->pid);
-		return -1;
-	}
+        pipeline->encoder = update_encoder_list_cinfo(ctx, &cinfo);
+        if (!pipeline->encoder)
+        {
+            mprint("Failed to get encoder context for DVB stream PID 0x%x\n", stream->pid);
+            return -1;
+        }
+    }
+
+	// Link the specific decoder and encoder to the DVB context
+	pipeline->dvb_ctx->dec_ctx = pipeline->dec_ctx;
+	pipeline->dvb_ctx->encoder = pipeline->encoder;
+	pipeline->dvb_ctx->timing = pipeline->dec_ctx->timing;
 
 	// Decode the DVB subtitle data using the stream-specific decoder
-	return dvb_decode(stream->dvb_decoder_ctx, enc_ctx, dec_ctx, buf, buf_size, sub);
+	// Pass NULL for packet info as it's not strictly used in the wrapper currently
+	dvb_decode(pipeline->dvb_ctx, (unsigned char *)buf, buf_size, NULL);
+    
+    return 0;
 }
+
+// -------------------------------------------------------------------------
+// Pipeline Management Implementation
+// -------------------------------------------------------------------------
+
+static struct ccx_subtitle_pipeline *get_or_create_pipeline(struct lib_ccx_ctx *ctx, int pid, const char *lang, int page_id)
+{
+    // Search for existing pipeline
+    for (int i = 0; i < ctx->pipeline_count; i++)
+    {
+        if (ctx->pipelines[i].pid == pid && ctx->pipelines[i].page_id == page_id)
+        {
+            return &ctx->pipelines[i];
+        }
+    }
+    
+    // Create new pipeline
+    if (ctx->pipeline_count >= ctx->pipeline_cap)
+    {
+        int new_cap = ctx->pipeline_cap == 0 ? 4 : ctx->pipeline_cap * 2;
+        struct ccx_subtitle_pipeline *new_pipelines = realloc(ctx->pipelines, new_cap * sizeof(struct ccx_subtitle_pipeline));
+        if (!new_pipelines)
+        {
+            mprint("Error: Out of memory growing pipeline list\n");
+            return NULL;
+        }
+        ctx->pipelines = new_pipelines;
+        ctx->pipeline_cap = new_cap;
+    }
+    
+    struct ccx_subtitle_pipeline *pipeline = &ctx->pipelines[ctx->pipeline_count++];
+    memset(pipeline, 0, sizeof(struct ccx_subtitle_pipeline));
+    pipeline->pid = pid;
+    pipeline->page_id = page_id;
+    if (lang)
+        strncpy(pipeline->language, lang, 3);
+    else
+        strcpy(pipeline->language, "und");
+        
+    mprint("Created new pipeline for PID 0x%x (Lang: %s, Page: %d)\n", pid, pipeline->language, page_id);
+    
+    // Initialize specific decoder, encoder, timing if needed here.
+    // NOTE: In current flows, these are lazily initialized or shared. 
+    // Ideally we should move initialization here for true isolation.
+    
+    return pipeline;
+}
+
+void cleanup_dvb_multi_stream_pipeline(struct lib_ccx_ctx *ctx)
+{
+    if (ctx->pipelines)
+    {
+        for (int i = 0; i < ctx->pipeline_count; i++)
+        {
+            if (ctx->pipelines[i].filename) 
+                free(ctx->pipelines[i].filename);
+            // Free encoder, dvb_ctx if they were allocated specifically for this pipeline
+            if (ctx->pipelines[i].dvb_ctx)
+                dvb_free_decoder(&ctx->pipelines[i].dvb_ctx);
+        }
+        free(ctx->pipelines);
+        ctx->pipelines = NULL;
+    }
+    ctx->pipeline_count = 0;
+    ctx->pipeline_cap = 0;
+}
+
