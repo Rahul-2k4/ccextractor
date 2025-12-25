@@ -33,8 +33,8 @@
 #define DVBSUB_DISPLAYDEFINITION_SEGMENT 0x14
 #define DVBSUB_DISPLAY_SEGMENT 0x80
 
-// [COMPATIBILITY]
-typedef struct ccx_decoders_dvb_context DVBSubContext;
+// [COMPATIBILITY Note]
+// DVBSubContext is now typedef'd in the header as: typedef struct ccx_decoders_dvb_context { ... } DVBSubContext;
 
 #define SCALEBITS 10
 #define ONE_HALF (1 << (SCALEBITS - 1))
