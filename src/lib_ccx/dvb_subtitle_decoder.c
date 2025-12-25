@@ -1716,12 +1716,12 @@ void dvbsub_handle_display_segment(struct encoder_ctx *enc_ctx,
 	dec_ctx->prev = copy_decoder_context(dec_ctx);
 
 	freep(&dec_ctx->prev->private_data);
-	dec_ctx->prev->private_data = malloc(sizeof(struct DVBSubContext));
+	dec_ctx->prev->private_data = malloc(sizeof(DVBSubContext));
 	if (!dec_ctx->prev->private_data)
 	{
 		fatal(EXIT_NOT_ENOUGH_MEMORY, "In dvbsub_handle_display_segment: Out of memory allocating private_data.");
 	}
-	memcpy(dec_ctx->prev->private_data, dec_ctx->private_data, sizeof(struct DVBSubContext));
+	memcpy(dec_ctx->prev->private_data, dec_ctx->private_data, sizeof(DVBSubContext));
 	/* copy previous subtitle */
 	free_subtitle(sub->prev);
 	sub->time_out = ctx->time_out;
