@@ -24,6 +24,93 @@ extern "C"
 {
 #endif
 
+	// --- STRUCT DEFINITIONS MOVED FROM .C ---
+
+	typedef struct DVBSubCLUT
+	{
+		int id;
+		int version;
+
+		uint32_t clut4[4];
+		uint32_t clut16[16];
+		uint32_t clut256[256];
+		uint8_t ilut4[4];
+		uint8_t ilut16[16];
+		uint8_t ilut256[256];
+
+		struct DVBSubCLUT *next;
+	} DVBSubCLUT;
+
+	typedef struct DVBSubObjectDisplay
+	{
+		int object_id;
+		int region_id;
+
+		int x_pos;
+		int y_pos;
+
+		int fgcolor;
+		int bgcolor;
+
+		struct DVBSubObjectDisplay *region_list_next;
+		struct DVBSubObjectDisplay *object_list_next;
+	} DVBSubObjectDisplay;
+
+	typedef struct DVBSubObject
+	{
+		int id;
+		int version;
+
+		int type;
+
+		DVBSubObjectDisplay *display_list;
+
+		struct DVBSubObject *next;
+	} DVBSubObject;
+
+	typedef struct DVBSubRegionDisplay
+	{
+		int region_id;
+
+		int x_pos;
+		int y_pos;
+
+		struct DVBSubRegionDisplay *next;
+	} DVBSubRegionDisplay;
+
+	typedef struct DVBSubRegion
+	{
+		int id;
+		int version;
+
+		int width;
+		int height;
+		int depth;
+
+		int clut;
+		int bgcolor;
+
+		uint8_t *pbuf;
+		int buf_size;
+		int dirty;
+
+		DVBSubObjectDisplay *display_list;
+
+		struct DVBSubRegion *next;
+	} DVBSubRegion;
+
+	typedef struct DVBSubDisplayDefinition
+	{
+		int version;
+
+		int x;
+		int y;
+		int width;
+		int height;
+	} DVBSubDisplayDefinition;
+
+	// --- CONFIG & CONTEXT ---
+
 	struct dvb_config
 	{
 		unsigned char n_language;
@@ -36,49 +123,62 @@ extern "C"
 		unsigned short ancillary_id[MAX_LANGUAGE_PER_DESC];
 	};
 
+	// ISOLATION CONTEXT (Replaces globals)
+	struct ccx_decoders_dvb_context
+	{
+		// Timing & Output
+		struct ccx_common_timing_ctx *timing; // Points to pipeline's timing
+		struct encoder_ctx *encoder;          // Points to pipeline's output encoder
+
+		// DVB State
+		int composition_id;
+		int ancillary_id;
+		int version;
+		LLONG time_out; // Changed to LLONG to match DVBSubContext usage
+		int compute_ids; // Flag to compute IDs if missing
+		
+		// Linked lists for objects/regions/cluts
+		DVBSubRegionDisplay *display_list;
+		DVBSubCLUT *clut_list;
+		DVBSubRegion *region_list;
+		DVBSubObject *object_list;
+		DVBSubDisplayDefinition *display_definition;
+		
+		DVBSubCLUT default_clut; 
+		
+	#ifdef ENABLE_OCR
+		void *ocr_ctx; // OCR Context
+	#endif
+
+		// Helpers for ID management
+		int prev_ancillary_id;
+		int prev_composition_id;
+	};
+
+	// --- FUNCTION PROTOTYPES ---
+
 	/**
-	 * @param cfg Structure containg configuration
-	 *
-	 * @return DVB context kept as void* for abstraction
-	 *
+	 * Initialize a DVB subtitle decoder instance
 	 */
-	void *dvbsub_init_decoder(struct dvb_config *cfg, int initialized_ocr);
-
-	int dvbsub_close_decoder(void **dvb_ctx);
+	void *dvb_init_decoder(struct ccx_common_timing_ctx *timing, struct encoder_ctx *encoder);
 
 	/**
-	 * @param dvb_ctx    PreInitialized DVB context using DVB
-	 * @param buf        buffer containing segment data, first sync byte need to 0x0f.
-	 *                   does not include data_identifier and subtitle_stream_id.
-	 * @param buf_size   size of buf buffer
-	 * @param sub        output subtitle data
-	 *
-	 * @return           -1 on error
+	 * Free a DVB subtitle decoder instance
 	 */
-	int dvbsub_decode(struct encoder_ctx *enc_ctx, struct lib_cc_decode *dec_ctx, const unsigned char *buf, int buf_size, struct cc_subtitle *sub);
+	void dvb_free_decoder(void *ctx);
 
 	/**
-	 * @func parse_dvb_description
-	 *
-	 * data pointer to this function should be after description length and description tag is parsed
-	 *
-	 * @param cfg preallocated dvb_config structure where parsed description will be stored,Not to be NULL
-	 *
-	 * @return return -1 if invalid data found other wise 0 if everything goes well
-	 * errno is set is to EINVAL if invalid data is found
+	 * Decode a DVB subtitle packet
+	 */
+	int dvb_decode(void *ctx, struct lib_cc_decode *dec_ctx, const unsigned char *buf, int buf_size, struct cc_subtitle *sub);
+
+	/**
+	 * Parse DVB description from PMT
 	 */
 	int parse_dvb_description(struct dvb_config *cfg, unsigned char *data,
 				  unsigned int len);
 
-	/*
-	 * @func dvbsub_set_write the output structure in dvb
-	 * set ccx_s_write structure in dvb_ctx
-	 *
-	 * @param dvb_ctx context of dvb which was returned by dvbsub_init_decoder
-	 *
-	 * @param out output context returned by init_write
-	 *
-	 */
+	// Legacy kept for compatibility (may be removed or updated)
 	void dvbsub_set_write(void *dvb_ctx, struct ccx_s_write *out);
 
 #ifdef __cplusplus

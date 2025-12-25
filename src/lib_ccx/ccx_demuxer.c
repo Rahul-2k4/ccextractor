@@ -11,6 +11,27 @@ int ccxr_demuxer_open(struct ccx_demuxer *ctx, const char *file);
 LLONG ccxr_demuxer_get_file_size(struct ccx_demuxer *ctx);
 void ccxr_demuxer_print_cfg(const struct ccx_demuxer *ctx);
 #endif
+#define INITIAL_STREAM_CAPACITY 16
+
+int ccx_demuxer_grow_streams(struct ccx_demuxer *ctx)
+{
+    int new_cap = ctx->potential_stream_capacity * 2;
+    if (new_cap == 0) new_cap = INITIAL_STREAM_CAPACITY;
+
+    struct ccx_stream_metadata *tmp =
+        realloc(ctx->potential_streams,
+                new_cap * sizeof(*tmp));
+
+    if (!tmp)
+        return -1;
+
+    memset(tmp + ctx->potential_stream_count, 0,
+           (new_cap - ctx->potential_stream_count) * sizeof(*tmp));
+
+    ctx->potential_streams = tmp;
+    ctx->potential_stream_capacity = new_cap;
+    return 0;
+}
 
 static void ccx_demuxer_reset(struct ccx_demuxer *ctx)
 {
@@ -338,8 +359,23 @@ struct ccx_demuxer *init_demuxer(void *parent, struct demuxer_cfg *cfg)
 	ctx->ts_autoprogram = cfg->ts_autoprogram;
 	ctx->ts_allprogram = cfg->ts_allprogram;
 	ctx->ts_datastreamtype = cfg->ts_datastreamtype;
+	ctx->ts_datastreamtype = cfg->ts_datastreamtype;
 	ctx->nb_program = 0;
 	ctx->multi_stream_per_prog = 0;
+
+	// [MODIFIED]
+    ctx->potential_stream_capacity = INITIAL_STREAM_CAPACITY;
+    ctx->potential_streams = calloc(
+        ctx->potential_stream_capacity,
+        sizeof(struct ccx_stream_metadata)
+    );
+    if (!ctx->potential_streams)
+    {
+        free(ctx);
+        return NULL;
+    }
+	ctx->potential_stream_count = 0;
+	ctx->options = &ccx_options;
 
 	for (int i = 0; i < MAX_PROGRAM; i++)
 	{

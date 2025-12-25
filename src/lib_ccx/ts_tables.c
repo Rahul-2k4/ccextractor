@@ -384,6 +384,68 @@ int parse_PMT(struct ccx_demuxer *ctx, unsigned char *buf, int len, struct progr
 				}
 				if (CCX_MPEG_DSC_DVB_SUBTITLE == descriptor_tag)
 				{
+					// If split_dvb_subs is enabled, capture stream metadata checks
+					if (ctx->options->split_dvb_subs)
+					{
+						int logical_type = CCX_STREAM_TYPE_DVB_SUB;
+						unsigned char *sub_ptr = es_info;
+						int bytes_left = desc_len;
+						
+						// Iterating over languages in the descriptor
+						while (bytes_left >= 8)
+						{
+							char lang_code[4];
+							memcpy(lang_code, sub_ptr, 3);
+							lang_code[3] = '\0';
+							
+							// Validate language code
+							if (!isalpha(lang_code[0]) || !isalpha(lang_code[1]) || !isalpha(lang_code[2]))
+							{
+								strcpy(lang_code, "und");
+							}
+
+							// Check if we already have this stream (PID + Type + Lang)
+							int exists = 0;
+							for (int k = 0; k < ctx->potential_stream_count; k++)
+							{
+								if (ctx->potential_streams[k].pid == elementary_PID &&
+									ctx->potential_streams[k].stream_type == logical_type &&
+									strcmp(ctx->potential_streams[k].lang, lang_code) == 0)
+								{
+									exists = 1;
+									break;
+								}
+							}
+
+							if (!exists)
+							{
+								if (ctx->potential_stream_count >= ctx->potential_stream_capacity)
+								{
+                                    if (ccx_demuxer_grow_streams(ctx) != 0)
+                                    {
+									    mprint("Warning: Max subtitle streams reached and failed to grow.\n");
+                                        // Skip this stream
+                                        goto next_lang; 
+                                    }
+								}
+                                
+								struct ccx_stream_metadata *meta = &ctx->potential_streams[ctx->potential_stream_count++];
+								meta->pid = elementary_PID;
+								meta->stream_type = logical_type;
+								meta->mpeg_type = stream_type;
+								strncpy(meta->lang, lang_code, 4);
+								// Note: User architecture removed page IDs from metadata struct in demuxer.h
+								
+								mprint("PMT: Discovered DVB subtitle stream - PID=0x%04X, Lang=%s\n", 
+									elementary_PID, lang_code);
+                                next_lang:; // Label for loops to continue
+							}
+
+							sub_ptr += 8;
+							bytes_left -= 8;
+						}
+					}
+
 					struct dvb_config cnf;
 #ifndef ENABLE_OCR
 					if (ccx_options.write_format != CCX_OF_SPUPNG)

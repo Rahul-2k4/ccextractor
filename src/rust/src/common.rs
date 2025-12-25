@@ -169,6 +169,7 @@ pub unsafe fn copy_from_rust(ccx_s_options: *mut ccx_s_options, options: Options
     (*ccx_s_options).tickertext = options.tickertext as _;
     (*ccx_s_options).hardsubx = options.hardsubx as _;
     (*ccx_s_options).hardsubx_and_common = options.hardsubx_and_common as _;
+    (*ccx_s_options).split_dvb_subs = options.split_dvb_subs as _;
     if let Some(dvblang) = options.dvblang {
         (*ccx_s_options).dvblang =
             replace_rust_c_string((*ccx_s_options).dvblang, dvblang.to_ctype().as_str());
@@ -400,6 +401,7 @@ pub unsafe fn copy_to_rust(ccx_s_options: *const ccx_s_options) -> Options {
     options.tickertext = (*ccx_s_options).tickertext != 0;
     options.hardsubx = (*ccx_s_options).hardsubx != 0;
     options.hardsubx_and_common = (*ccx_s_options).hardsubx_and_common != 0;
+    options.split_dvb_subs = (*ccx_s_options).split_dvb_subs != 0;
 
     // Handle dvblang (C string to Option<Language>)
     if !(*ccx_s_options).dvblang.is_null() {

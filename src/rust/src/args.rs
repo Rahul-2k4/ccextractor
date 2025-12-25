@@ -637,6 +637,9 @@ pub struct Args {
     /// comments in the XML file.
     #[arg(long, verbatim_doc_comment, help_heading=OUTPUT_AFFECTING_OUTPUT_FILES)]
     pub no_spupngocr: bool,
+    /// Split DVB subtitles into separate files per stream
+    #[arg(long, verbatim_doc_comment, help_heading=OUTPUT_AFFECTING_OUTPUT_FILES)]
+    pub split_dvb_subs: bool,
     /// Specify the full path of the font that is to be used when
     /// generating SPUPNG files. If not specified, you need to
     /// have the default font installed (Helvetica for macOS, Calibri

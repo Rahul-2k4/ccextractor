@@ -79,8 +79,33 @@ struct cap_info
 	*/
 	struct list_head pg_stream;
 };
+
+
+// [ADD THESE DEFINITIONS]
+#define MAX_POTENTIAL_STREAMS 64
+#define CCX_STREAM_TYPE_UNKNOWN 0
+#define CCX_STREAM_TYPE_DVB_SUB 1
+#define CCX_STREAM_TYPE_TELETEXT 2
+
+struct ccx_stream_metadata
+{
+    int pid;
+    int stream_type;
+    int mpeg_type;
+    char lang[8];
+    int composition_page_id;
+    int ancillary_page_id;
+    uint8_t pending_removal;
+};
+
 struct ccx_demuxer
 {
+    struct ccx_stream_metadata *potential_streams;
+    int potential_stream_count;
+    int potential_stream_capacity;
+
+    struct ccx_s_options *options;
+
 	int m2ts;
 	enum ccx_stream_mode_enum stream_mode;
 	enum ccx_stream_mode_enum auto_stream;

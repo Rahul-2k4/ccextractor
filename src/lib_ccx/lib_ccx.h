@@ -81,6 +81,24 @@ struct ccx_s_mp4Cfg
 	unsigned int mp4vidtrack : 1;
 };
 
+// [NEW PIPELINE STRUCT]
+#define MAX_DVB_PIPELINES 32
+
+struct ccx_subtitle_pipeline
+{
+    int pid;
+    int in_use;
+    int composition_page_id;
+    int ancillary_page_id;
+    char lang[8];
+    char filename[PATH_MAX];
+
+    void *dvb_context;
+    struct ccx_common_timing_ctx *timing;
+    struct encoder_ctx *encoder;
+    struct lib_cc_decode *decoder;
+};
+
 struct lib_ccx_ctx
 {
 	// Stuff common to both loops
@@ -112,6 +130,14 @@ struct lib_ccx_ctx
 	int cc_to_stdout;		// If 1, captions go to stdout instead of file
 	int pes_header_to_stdout;	// If 1, PES Header data will be outputted to console
 	int dvb_debug_traces_to_stdout; // If 1, DVB subtitle debug traces will be outputted to console
+	int dvb_debug_traces_to_stdout; // If 1, DVB subtitle debug traces will be outputted to console
+	int split_dvb_subs; // If 1, split DVB subtitles into separate files per stream
+    
+    // [NEW PIPELINE REGISTRY]
+    struct ccx_subtitle_pipeline pipelines[MAX_DVB_PIPELINES];
+    pthread_mutex_t pipeline_mutex;
+
+    /* pipeline_count REMOVED (no longer needed) */
 	int ignore_pts_jumps;		// If 1, the program will ignore PTS jumps. Sometimes this parameter is required for DVB subs with > 30s pause time
 
 	LLONG subs_delay; // ms to delay (or advance) subs

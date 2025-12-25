@@ -161,3 +161,29 @@ plans/
 tess.log
 **/tess.log
 ut=srt*
+
+# Media files
+*.ts
+*.mp4
+*.mkv
+*.avi
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+logs/
+
+# Windows system files
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+
+# Subtitles
+*.srt
+
+# Agent Memory
+GEMINI.md

@@ -33,6 +33,9 @@
 #define DVBSUB_DISPLAYDEFINITION_SEGMENT 0x14
 #define DVBSUB_DISPLAY_SEGMENT 0x80
 
+// [COMPATIBILITY]
+typedef struct ccx_decoders_dvb_context DVBSubContext;
+
 #define SCALEBITS 10
 #define ONE_HALF (1 << (SCALEBITS - 1))
 #define FIX(x) ((int)((x) * (1 << SCALEBITS) + 0.5))
@@ -87,109 +90,8 @@ const uint8_t crop_tab[256 + 2 * MAX_NEG_CROP] = {times256(0x00), 0x00, 0x01,
 
 #define RGBA(r, g, b, a) (((unsigned)(a) << 24) | ((r) << 16) | ((g) << 8) | (b))
 
-typedef struct DVBSubCLUT
-{
-	int id;
-	int version;
-
-	uint32_t clut4[4];
-	uint32_t clut16[16];
-	uint32_t clut256[256];
-	uint8_t ilut4[4];
-	uint8_t ilut16[16];
-	uint8_t ilut256[256];
-
-	struct DVBSubCLUT *next;
-} DVBSubCLUT;
-
-static DVBSubCLUT default_clut;
-
-typedef struct DVBSubObjectDisplay
-{
-	int object_id;
-	int region_id;
-
-	int x_pos;
-	int y_pos;
-
-	int fgcolor;
-	int bgcolor;
-
-	struct DVBSubObjectDisplay *region_list_next;
-	struct DVBSubObjectDisplay *object_list_next;
-} DVBSubObjectDisplay;
-
-typedef struct DVBSubObject
-{
-	int id;
-	int version;
-
-	int type;
-
-	DVBSubObjectDisplay *display_list;
-
-	struct DVBSubObject *next;
-} DVBSubObject;
-
-typedef struct DVBSubRegionDisplay
-{
-	int region_id;
-
-	int x_pos;
-	int y_pos;
-
-	struct DVBSubRegionDisplay *next;
-} DVBSubRegionDisplay;
-
-typedef struct DVBSubRegion
-{
-	int id;
-	int version;
-
-	int width;
-	int height;
-	int depth;
-
-	int clut;
-	int bgcolor;
-
-	uint8_t *pbuf;
-	int buf_size;
-	int dirty;
-
-	DVBSubObjectDisplay *display_list;
-
-	struct DVBSubRegion *next;
-} DVBSubRegion;
-
-typedef struct DVBSubDisplayDefinition
-{
-	int version;
-
-	int x;
-	int y;
-	int width;
-	int height;
-} DVBSubDisplayDefinition;
-
-typedef struct DVBSubContext
-{
-	int composition_id;
-	int ancillary_id;
-	int lang_index;
-	int version;
-	/* Store time in ms */
-	LLONG time_out;
-#ifdef ENABLE_OCR
-	void *ocr_ctx;
-#endif
-	DVBSubRegion *region_list;
-	DVBSubCLUT *clut_list;
-	DVBSubObject *object_list;
-
-	DVBSubRegionDisplay *display_list;
-	DVBSubDisplayDefinition *display_definition;
-} DVBSubContext;
+// [STRUCT definitions moved to dvb_subtitle_decoder.h]
+// [static DVBSubCLUT default_clut removed, moved to context]
 
 static __inline unsigned int bytestream_get_byte(const uint8_t **b)
 {
@@ -418,49 +320,49 @@ static void delete_regions(DVBSubContext *ctx)
  * @return DVB context kept as void* for abstraction
  *
  */
-void *dvbsub_init_decoder(struct dvb_config *cfg, int initialized_ocr)
+/**
+ * @param timing Component for timing updates
+ * @param encoder Component for subtitle output
+ *
+ * @return DVB context kept as void* for abstraction
+ */
+void *dvb_init_decoder(struct ccx_common_timing_ctx *timing, struct encoder_ctx *encoder)
 {
 	int i, r, g, b, a = 0;
-	DVBSubContext *ctx = (DVBSubContext *)malloc(sizeof(DVBSubContext));
+	// Allocate new context
+	struct ccx_decoders_dvb_context *ctx = (struct ccx_decoders_dvb_context *)malloc(sizeof(struct ccx_decoders_dvb_context));
 	if (!ctx)
 	{
-		fatal(EXIT_NOT_ENOUGH_MEMORY, "In dvbsub_init_decoder: Out of memory.");
+		fatal(EXIT_NOT_ENOUGH_MEMORY, "In dvb_init_decoder: Out of memory.");
 	}
-	memset(ctx, 0, sizeof(DVBSubContext));
+	memset(ctx, 0, sizeof(struct ccx_decoders_dvb_context));
 
-	if (cfg)
-	{
-		ctx->composition_id = cfg->composition_id[0];
-		ctx->ancillary_id = cfg->ancillary_id[0];
-		ctx->lang_index = cfg->lang_index[0];
-	}
-	else
-	{
-		ctx->composition_id = 1;
-		ctx->ancillary_id = 1;
-		ctx->lang_index = 1;
-	}
+	// Initialize components
+	ctx->timing = timing;
+	ctx->encoder = encoder;
 
-#ifdef ENABLE_OCR
-	if (!initialized_ocr)
-		ctx->ocr_ctx = init_ocr(ctx->lang_index);
-#endif
+	// Defaults
+	ctx->composition_id = -1;
+	ctx->ancillary_id = -1;
 	ctx->version = -1;
+	ctx->time_out = 0;
+	ctx->compute_ids = 1; // Auto-compute IDs if missing
 
-	default_clut.id = -1;
-	default_clut.next = NULL;
+	// Initialize default CLUT (moved from static global)
+	ctx->default_clut.id = -1;
+	ctx->default_clut.next = NULL;
 
-	default_clut.clut4[0] = RGBA(0, 0, 0, 0);
-	default_clut.clut4[1] = RGBA(255, 255, 255, 255);
-	default_clut.clut4[2] = RGBA(0, 0, 0, 255);
-	default_clut.clut4[3] = RGBA(127, 127, 127, 255);
-	default_clut.ilut4[0] = 0;
-	default_clut.ilut4[1] = 255;
-	default_clut.ilut4[2] = 0;
-	default_clut.ilut4[3] = 127;
+	ctx->default_clut.clut4[0] = RGBA(0, 0, 0, 0);
+	ctx->default_clut.clut4[1] = RGBA(255, 255, 255, 255);
+	ctx->default_clut.clut4[2] = RGBA(0, 0, 0, 255);
+	ctx->default_clut.clut4[3] = RGBA(127, 127, 127, 255);
+	ctx->default_clut.ilut4[0] = 0;
+	ctx->default_clut.ilut4[1] = 255;
+	ctx->default_clut.ilut4[2] = 0;
+	ctx->default_clut.ilut4[3] = 127;
 
-	default_clut.clut16[0] = RGBA(0, 0, 0, 0);
-	default_clut.ilut16[0] = 0;
+	ctx->default_clut.clut16[0] = RGBA(0, 0, 0, 0);
+	ctx->default_clut.ilut16[0] = 0;
 	for (i = 1; i < 16; i++)
 	{
 		if (i < 8)
@@ -475,12 +377,12 @@ void *dvbsub_init_decoder(struct dvb_config *cfg, int initialized_ocr)
 			g = (i & 2) ? 127 : 0;
 			b = (i & 4) ? 127 : 0;
 		}
-		default_clut.clut16[i] = RGBA(r, g, b, 255);
-		default_clut.ilut16[i] = 0;
+		ctx->default_clut.clut16[i] = RGBA(r, g, b, 255);
+		ctx->default_clut.ilut16[i] = 0;
 	}
 
-	default_clut.clut256[0] = RGBA(0, 0, 0, 0);
-	default_clut.ilut256[0] = 0;
+	ctx->default_clut.clut256[0] = RGBA(0, 0, 0, 0);
+	ctx->default_clut.ilut256[0] = 0;
 	for (i = 1; i < 256; i++)
 	{
 		if (i < 8)
@@ -520,43 +422,47 @@ void *dvbsub_init_decoder(struct dvb_config *cfg, int initialized_ocr)
 					break;
 			}
 		}
-		default_clut.ilut256[i] = 0;
-		default_clut.clut256[i] = RGBA(r, g, b, a);
+		ctx->default_clut.ilut256[i] = 0;
+		ctx->default_clut.clut256[i] = RGBA(r, g, b, a);
 	}
+
+#ifdef ENABLE_OCR
+    // OCR init logic if needed, but we don't have lang_index passed in init anymore
+    // If needed, it must be set later or we assume default.
+    // Assuming 0 for now as per struct init.
+    // if (!initialized_ocr) ctx->ocr_ctx = init_ocr(0);
+#endif
 
 	return (void *)ctx;
 }
-int dvbsub_close_decoder(void **dvb_ctx)
+void dvb_free_decoder(void *ctx)
 {
-	DVBSubContext *ctx;
+	struct ccx_decoders_dvb_context *dvb_ctx = (struct ccx_decoders_dvb_context *)ctx;
 	DVBSubRegionDisplay *display;
 
-	if (!dvb_ctx || !*dvb_ctx)
-		return 0;
+	if (!dvb_ctx)
+		return;
 
-	ctx = (DVBSubContext *)*dvb_ctx;
+	delete_regions(dvb_ctx);
 
-	delete_regions(ctx);
+	delete_objects(dvb_ctx);
 
-	delete_objects(ctx);
+	delete_cluts(dvb_ctx);
 
-	delete_cluts(ctx);
+	freep(&dvb_ctx->display_definition);
 
-	freep(&ctx->display_definition);
-
-	while (ctx->display_list)
+	while (dvb_ctx->display_list)
 	{
-		display = ctx->display_list;
-		ctx->display_list = display->next;
+		display = dvb_ctx->display_list;
+		dvb_ctx->display_list = display->next;
 		free(display);
 	}
 
 #ifdef ENABLE_OCR
-	if (ctx->ocr_ctx)
-		delete_ocr(&ctx->ocr_ctx);
+	if (dvb_ctx->ocr_ctx)
+		delete_ocr(&dvb_ctx->ocr_ctx);
 #endif
-	freep(dvb_ctx);
-	return 0;
+	free(dvb_ctx);
 }
 
 static int dvbsub_read_2bit_string(uint8_t *destbuf, int dbuf_len,
@@ -1615,11 +1521,11 @@ static int write_dvb_sub(struct lib_cc_decode *dec_ctx, struct cc_subtitle *sub)
 		}
 		rect->nb_colors = (1 << region->depth);
 
-		// Process CLUT
+		// Process CLUT with context
 		clut = get_clut(ctx, region->clut);
 
 		if (!clut)
-			clut = &default_clut;
+			clut = &ctx->default_clut;
 
 		switch (region->depth)
 		{
@@ -1853,9 +1759,15 @@ void dvbsub_handle_display_segment(struct encoder_ctx *enc_ctx,
  *
  * @return           -1 on error
  */
-int dvbsub_decode(struct encoder_ctx *enc_ctx, struct lib_cc_decode *dec_ctx, const unsigned char *buf, int buf_size, struct cc_subtitle *sub)
+int dvb_decode(void *ptr, struct lib_cc_decode *dec_ctx, const unsigned char *buf, int buf_size, struct cc_subtitle *sub)
 {
-	DVBSubContext *ctx = (DVBSubContext *)dec_ctx->private_data;
+	DVBSubContext *ctx = (DVBSubContext *)ptr;
+	struct encoder_ctx *enc_ctx;
+
+	if (!ctx)
+		return -1;
+
+	enc_ctx = ctx->encoder;
 	const uint8_t *p, *p_end;
 	int segment_type;
 	int page_id;

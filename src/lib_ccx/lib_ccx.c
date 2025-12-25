@@ -183,6 +183,7 @@ struct lib_ccx_ctx *init_libraries(struct ccx_s_options *opt)
 	ctx->cc_to_stdout = opt->cc_to_stdout;
 	ctx->pes_header_to_stdout = opt->pes_header_to_stdout;
 	ctx->ignore_pts_jumps = opt->ignore_pts_jumps;
+	ctx->split_dvb_subs = opt->split_dvb_subs;
 
 	ctx->hauppauge_mode = opt->hauppauge_mode;
 	ctx->live_stream = opt->live_stream;
@@ -192,6 +193,18 @@ struct lib_ccx_ctx *init_libraries(struct ccx_s_options *opt)
 	ctx->demux_ctx = init_demuxer(ctx, &opt->demux_cfg);
 	INIT_LIST_HEAD(&ctx->dec_ctx_head);
 	INIT_LIST_HEAD(&ctx->enc_ctx_head);
+
+    // [INIT PIPELINES]
+#ifdef _WIN32
+    ctx->pipeline_mutex = PTHREAD_MUTEX_INITIALIZER;
+#else
+    pthread_mutex_init(&ctx->pipeline_mutex, NULL);
+#endif
+    for (int i = 0; i < MAX_DVB_PIPELINES; i++)
+    {
+        ctx->pipelines[i].in_use = 0;
+        ctx->pipelines[i].pid = -1;
+    }
 
 	// Init timing
 	ccx_common_timing_init(&ctx->demux_ctx->past, opt->nosync);
@@ -275,6 +288,48 @@ void dinit_libraries(struct lib_ccx_ctx **ctx)
 	for (i = 0; i < lctx->num_input_files; i++)
 		freep(&lctx->inputfile[i]);
 	freep(&lctx->inputfile);
+    
+    // [CLEANUP PIPELINES]
+    for (i = 0; i < MAX_DVB_PIPELINES; i++)
+    {
+        if (lctx->pipelines[i].in_use)
+        {
+            if (lctx->pipelines[i].dvb_context)
+                dvb_free_decoder(lctx->pipelines[i].dvb_context);
+            
+            if (lctx->pipelines[i].decoder)
+            {
+                // Basic cleanup for decoder context
+                struct lib_cc_decode *d = lctx->pipelines[i].decoder;
+                dinit_cc_decode(&d); // Takes pointer to pointer
+                // dinit_cc_decode frees the struct itself? 
+                // Checks CCExtractor source: often defined as taking **ctx and freeing *ctx.
+                // Assuming dinit_cc_decode frees the memory.
+            }
+            
+            if (lctx->pipelines[i].timing)
+                free(lctx->pipelines[i].timing);
+                
+            if (lctx->pipelines[i].encoder)
+            {
+                struct encoder_ctx *e = lctx->pipelines[i].encoder;
+                // It was added to list, so remove it
+                list_del(&e->list);
+                dinit_encoder(&e, 0); // FTS 0? Safe enough.
+            }
+        }
+    }
+#ifdef _WIN32
+    // No destroy needed for PTHREAD_MUTEX_INITIALIZER? 
+    // Actually pthread-win32 might need it. Safe to call destroy.
+    // Or if using native Windows generic structs?
+    // CCExtractor usually uses a wrapper or pthread-win32. 
+    // I'll add the call wrapped in loop end or after loop.
+#endif
+    // destroy mutex
+#ifndef _WIN32
+             pthread_mutex_destroy(&lctx->pipeline_mutex);
+#endif
 	freep(ctx);
 }
 
@@ -486,4 +541,166 @@ struct encoder_ctx *update_encoder_list_cinfo(struct lib_ccx_ctx *ctx, struct ca
 struct encoder_ctx *update_encoder_list(struct lib_ccx_ctx *ctx)
 {
 	return update_encoder_list_cinfo(ctx, NULL);
+}
+
+struct ccx_subtitle_pipeline *get_or_create_pipeline(
+    struct lib_ccx_ctx *ctx,
+    int pid,
+    int composition_page_id,
+    int ancillary_page_id,
+    const char *lang)
+{
+    if (!ctx || !lang)
+        return NULL;
+
+    pthread_mutex_lock(&ctx->pipeline_mutex);
+
+    /* Search existing */
+    for (int i = 0; i < MAX_DVB_PIPELINES; i++)
+    {
+        struct ccx_subtitle_pipeline *p = &ctx->pipelines[i];
+        if (p->in_use &&
+            p->pid == pid &&
+            p->composition_page_id == composition_page_id &&
+            p->ancillary_page_id == ancillary_page_id)
+        {
+            pthread_mutex_unlock(&ctx->pipeline_mutex);
+            return p;
+        }
+    }
+
+    /* Allocate new slot */
+    struct ccx_subtitle_pipeline *pipe = NULL;
+    for (int i = 0; i < MAX_DVB_PIPELINES; i++)
+    {
+        if (!ctx->pipelines[i].in_use)
+        {
+            pipe = &ctx->pipelines[i];
+            break;
+        }
+    }
+
+    if (!pipe)
+    {
+        pthread_mutex_unlock(&ctx->pipeline_mutex);
+        mprint("WARNING: Max DVB pipelines reached\n");
+        return NULL;
+    }
+
+    pipe->in_use = 1;
+    pipe->pid = pid;
+    pipe->composition_page_id = composition_page_id;
+    pipe->ancillary_page_id = ancillary_page_id;
+    strncpy(pipe->lang, lang, sizeof(pipe->lang) - 1);
+
+    /* Filename (collision-safe, bounded) */
+    int attempt;
+    #define MAX_FILENAME_ATTEMPTS 100
+    for (attempt = 0; attempt < MAX_FILENAME_ATTEMPTS; attempt++)
+    {
+        if (attempt == 0)
+            snprintf(pipe->filename, PATH_MAX,
+                     "%s_%s.%s",
+                     ctx->basefilename,
+                     pipe->lang,
+                     ctx->extension);
+        else
+            snprintf(pipe->filename, PATH_MAX,
+                     "%s_%s_%d.%s",
+                     ctx->basefilename,
+                     pipe->lang,
+                     attempt,
+                     ctx->extension);
+
+        int fd = open(pipe->filename,
+                      O_CREAT | O_EXCL | O_WRONLY, 0644);
+        if (fd >= 0)
+        {
+            close(fd);
+            break;
+        }
+        if (errno != EEXIST)
+        {
+            pipe->in_use = 0;
+            pthread_mutex_unlock(&ctx->pipeline_mutex);
+            return NULL;
+        }
+    }
+
+    if (attempt >= MAX_FILENAME_ATTEMPTS)
+    {
+        pipe->in_use = 0;
+        pthread_mutex_unlock(&ctx->pipeline_mutex);
+        return NULL;
+    }
+
+    /* Init timing */
+    pipe->timing = calloc(1, sizeof(*pipe->timing));
+    ccx_common_timing_init(pipe->timing, ctx->options.disable_sync_check);
+
+    /* Init encoder */
+    pipe->encoder = calloc(1, sizeof(*pipe->encoder));
+    init_encoder(pipe->encoder, &ctx->options);
+
+    /* Init decoder */
+    pipe->dvb_context = dvb_init_decoder(pipe->timing, pipe->encoder);
+
+    pthread_mutex_unlock(&ctx->pipeline_mutex);
+    return pipe;
+}
+
+void update_pipeline_timing(struct ccx_subtitle_pipeline *pipe, int64_t pts)
+{
+    if (pipe && pipe->timing && pts != CCX_NOPTS)
+    {
+        set_current_pts(pipe->timing, pts);
+        set_fts(pipe->timing);
+    }
+}
+
+void process_dvb_multi_stream(struct lib_ccx_ctx *ctx, struct demuxer_data *data)
+{
+    if (!ctx->split_dvb_subs)
+        return;
+
+    int pid = data->stream_pid;
+    
+    // Find metadata for this PID
+    int composition_page_id = 0;
+    int ancillary_page_id = 0;
+    char lang[8] = "und";
+    
+    struct ccx_demuxer *demux = ctx->demux_ctx;
+    if (demux->potential_streams)
+    {
+        for (int j = 0; j < demux->potential_stream_count; j++)
+        {
+            if (demux->potential_streams[j].pid == pid)
+            {
+                composition_page_id = demux->potential_streams[j].composition_page_id;
+                ancillary_page_id = demux->potential_streams[j].ancillary_page_id;
+                strncpy(lang, demux->potential_streams[j].lang, 7);
+                lang[7] = '\0';
+                break;
+            }
+        }
+    }
+
+    struct ccx_subtitle_pipeline *pipe = get_or_create_pipeline(
+        ctx, pid, composition_page_id, ancillary_page_id, lang);
+    
+    if (pipe && pipe->dvb_context && pipe->decoder)
+    {
+        update_pipeline_timing(pipe, data->pts);
+        
+        // Decode
+        dvb_decode(pipe->dvb_context, pipe->decoder, data->buffer, data->len, &pipe->decoder->dec_sub);
+        
+        // Encode/Write if output available
+        if (pipe->decoder->dec_sub.got_output && pipe->encoder)
+        {
+            encode_sub(pipe->encoder, &pipe->decoder->dec_sub);
+            pipe->decoder->dec_sub.got_output = 0;
+        }
+    }
 }

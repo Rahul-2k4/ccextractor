@@ -478,6 +478,7 @@ void print_usage(void)
 	       "      --no-codec dvbsub   ignore dvb subtitle and follow default behaviour\n"
 	       "      --codec teletext   select the teletext subtitle from elementary stream\n"
 	       "      --no-codec teletext ignore teletext subtitle\n");
+    mprint("      --split-dvb-subs: For DVB subtitles, write each stream (language/page) to a separate file\n");
 
 	mprint("Adding start and end credits:\n");
 

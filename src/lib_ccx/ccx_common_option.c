@@ -70,6 +70,8 @@ void init_options(struct ccx_s_options *options)
 	options->tickertext = 0;	  // By default, do not assume ticker style text
 	options->hardsubx = 0;		  // By default, don't try to extract hard subtitles
 	options->dvblang = NULL;	  // By default, autodetect DVB language
+    /* Explicit boolean */
+    options->split_dvb_subs = 0;
 	options->ocrlang = NULL;	  // By default, autodetect .traineddata file
 	options->ocr_oem = -1;		  // By default, OEM mode depends on the tesseract version
 	options->psm = 3;		  // Default PSM mode (3 is the default tesseract as well)
