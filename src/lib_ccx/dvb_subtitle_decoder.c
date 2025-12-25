@@ -1059,7 +1059,7 @@ static int dvbsub_parse_clut_segment(void *dvb_ctx, const uint8_t *buf,
 			fatal(EXIT_NOT_ENOUGH_MEMORY, "In dvbsub_parse_clut_segment: Out of memory.");
 		}
 
-		memcpy(clut, &default_clut, sizeof(DVBSubCLUT));
+		memcpy(clut, &ctx->default_clut, sizeof(DVBSubCLUT));
 
 		clut->id = clut_id;
 		clut->version = -1;

@@ -124,7 +124,7 @@ extern "C"
 	};
 
 	// ISOLATION CONTEXT (Replaces globals)
-	struct ccx_decoders_dvb_context
+	typedef struct ccx_decoders_dvb_context
 	{
 		// Timing & Output
 		struct ccx_common_timing_ctx *timing; // Points to pipeline's timing
@@ -134,6 +134,7 @@ extern "C"
 		int composition_id;
 		int ancillary_id;
 		int version;
+		int lang_index;  // Language index for this subtitle stream
 		LLONG time_out; // Changed to LLONG to match DVBSubContext usage
 		int compute_ids; // Flag to compute IDs if missing
 		
@@ -153,7 +154,7 @@ extern "C"
 		// Helpers for ID management
 		int prev_ancillary_id;
 		int prev_composition_id;
-	};
+	} DVBSubContext;
 
 	// --- FUNCTION PROTOTYPES ---
 
