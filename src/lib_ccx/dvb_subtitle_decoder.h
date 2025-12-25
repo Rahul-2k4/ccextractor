@@ -25,6 +25,7 @@ extern "C"
 #endif
 
 	// --- STRUCT DEFINITIONS MOVED FROM .C ---
+	// Note: LLONG, ccx_common_timing_ctx, encoder_ctx are all defined in lib_ccx.h
 
 	typedef struct DVBSubCLUT
 	{
