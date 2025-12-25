@@ -11,6 +11,7 @@
 #include "ccx_common_structs.h"
 #include "ccx_common_timing.h"
 #include "ccx_common_option.h"
+#include <limits.h>
 
 #include "ccx_demuxer.h"
 #include "ccx_encoders_common.h"
@@ -129,7 +130,6 @@ struct lib_ccx_ctx
 
 	int cc_to_stdout;		// If 1, captions go to stdout instead of file
 	int pes_header_to_stdout;	// If 1, PES Header data will be outputted to console
-	int dvb_debug_traces_to_stdout; // If 1, DVB subtitle debug traces will be outputted to console
 	int dvb_debug_traces_to_stdout; // If 1, DVB subtitle debug traces will be outputted to console
 	int split_dvb_subs; // If 1, split DVB subtitles into separate files per stream
     
