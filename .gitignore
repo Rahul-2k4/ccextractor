@@ -161,3 +161,14 @@ plans/
 tess.log
 **/tess.log
 ut=srt*
+
+# Temporary build and test files
+build_log.txt
+grep_out.txt
+arte_multiaudio.ts
+test_output*.srt
+.agent/
+.cursorrules
+GEMINI.md
+CLAUDE.md
+
