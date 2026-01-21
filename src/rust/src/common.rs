@@ -1024,6 +1024,7 @@ impl CType<cap_info> for CapInfo {
             prev_counter: self.prev_counter,
             codec_private_data: self.codec_private_data,
             ignore: self.ignore,
+            lang: [0; 4], // Initialize empty language code for DVB split mode
             all_stream: self.all_stream,
             sib_head: self.sib_head,
             sib_stream: self.sib_stream,

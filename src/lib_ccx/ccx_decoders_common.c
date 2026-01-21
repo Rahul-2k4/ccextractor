@@ -211,7 +211,7 @@ int do_cb(struct lib_cc_decode *ctx, unsigned char *cc_block, struct cc_subtitle
 			default:
 				fatal(CCX_COMMON_EXIT_BUG_BUG, "In do_cb: Impossible value for cc_type, Please file a bug report on GitHub.\n");
 		} // switch (cc_type)
-	} // cc_valid
+	}	  // cc_valid
 	else
 	{
 		dbg_print(CCX_DMT_CBRAW, "    ..   ..   ..\n");
@@ -529,7 +529,7 @@ struct encoder_ctx *copy_encoder_context(struct encoder_ctx *ctx)
 	ctx_copy->start_credits_text = NULL;
 	ctx_copy->end_credits_text = NULL;
 	ctx_copy->prev = NULL;
-	ctx_copy->last_string = NULL;
+	ctx_copy->last_str = NULL;
 
 	if (ctx->buffer)
 	{
@@ -694,7 +694,7 @@ void free_encoder_context(struct encoder_ctx *ctx)
 	freep(&ctx->start_credits_text);
 	freep(&ctx->end_credits_text);
 	freep(&ctx->prev);
-	freep(&ctx->last_string);
+	freep(&ctx->last_str);
 	freep(&ctx);
 }
 void free_decoder_context(struct lib_cc_decode *ctx)
