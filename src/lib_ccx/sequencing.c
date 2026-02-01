@@ -96,13 +96,6 @@ void process_hdcc(struct encoder_ctx *enc_ctx, struct lib_cc_decode *dec_ctx, st
 	LLONG store_fts_now = dec_ctx->timing->fts_now;
 	int reset_cb = -1;
 
-	// DEBUG: Check first 50 sequences
-	for (int i = 0; i < 50; i++) {
-		if (dec_ctx->cc_data_count[i] > 0) {
-			mprint("DEBUG: seq=%d has %d captions, fts=%lld\n", i, dec_ctx->cc_data_count[i], (long long)dec_ctx->cc_fts[i]);
-		}
-	}
-
 	dbg_print(CCX_DMT_VERBOSE, "Flush HD caption blocks\n");
 
 	for (int seq = 0; seq < SORTBUF; seq++)
@@ -147,15 +140,27 @@ void process_hdcc(struct encoder_ctx *enc_ctx, struct lib_cc_decode *dec_ctx, st
 			// process it.
 		}
 
-		// Re-create original time
-		mprint("DEBUG sequencing: Restoring fts_now from %lld to %lld (seq=%d)\n", 
-			(long long)dec_ctx->timing->fts_now, (long long)dec_ctx->cc_fts[seq], seq);
-		dec_ctx->timing->fts_now = dec_ctx->cc_fts[seq];
+		// For container formats with reliable PTS, don't restore fts_now
+		// The current fts_now is already derived from accurate PTS
+		int skip_fts_restore = (dec_ctx->in_bufferdatatype == CCX_H264 ||
+		                        dec_ctx->in_bufferdatatype == CCX_PES);
+
+		if (!skip_fts_restore) {
+			// Re-create original time (only for elementary streams/GOP mode)
+			dec_ctx->timing->fts_now = dec_ctx->cc_fts[seq];
+		}
 		process_cc_data(enc_ctx, dec_ctx, dec_ctx->cc_data_pkts[seq], dec_ctx->cc_data_count[seq], sub);
 	}
 
-	// Restore the value
-	dec_ctx->timing->fts_now = store_fts_now;
+	// For container formats, don't restore fts_now - it should reflect the latest PTS
+	// For elementary streams, restore to maintain continuity
+	int skip_fts_final_restore = (dec_ctx->in_bufferdatatype == CCX_H264 ||
+	                               dec_ctx->in_bufferdatatype == CCX_PES);
+
+	if (!skip_fts_final_restore) {
+		// Restore the value (only for elementary streams)
+		dec_ctx->timing->fts_now = store_fts_now;
+	}
 
 	// Now that we are done, clean up.
 	init_hdcc(dec_ctx);

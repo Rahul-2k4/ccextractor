@@ -846,6 +846,11 @@ void handle_command(unsigned char c1, const unsigned char c2, ccx_decoder_608_co
 			}
 			if (changes)
 				context->current_visible_start_ms = get_visible_start(context->timing, context->my_field);
+			// CRITICAL FIX: For pop-on to roll-up transition with no scrolling (first CR, single line),
+			// set the start time to the current time. Otherwise, the caption would have start_time=0
+			// because current_visible_start_ms was never set for the rollup buffer.
+			else if (context->rollup_from_popon)
+				context->current_visible_start_ms = get_visible_start(context->timing, context->my_field);
 			context->cursor_column = 0;
 			break;
 		case COM_ERASENONDISPLAYEDMEMORY:
