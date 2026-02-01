@@ -140,13 +140,27 @@ void process_hdcc(struct encoder_ctx *enc_ctx, struct lib_cc_decode *dec_ctx, st
 			// process it.
 		}
 
-		// Re-create original time
-		dec_ctx->timing->fts_now = dec_ctx->cc_fts[seq];
+		// For container formats with reliable PTS, don't restore fts_now
+		// The current fts_now is already derived from accurate PTS
+		int skip_fts_restore = (dec_ctx->in_bufferdatatype == CCX_H264 ||
+		                        dec_ctx->in_bufferdatatype == CCX_PES);
+
+		if (!skip_fts_restore) {
+			// Re-create original time (only for elementary streams/GOP mode)
+			dec_ctx->timing->fts_now = dec_ctx->cc_fts[seq];
+		}
 		process_cc_data(enc_ctx, dec_ctx, dec_ctx->cc_data_pkts[seq], dec_ctx->cc_data_count[seq], sub);
 	}
 
-	// Restore the value
-	dec_ctx->timing->fts_now = store_fts_now;
+	// For container formats, don't restore fts_now - it should reflect the latest PTS
+	// For elementary streams, restore to maintain continuity
+	int skip_fts_final_restore = (dec_ctx->in_bufferdatatype == CCX_H264 ||
+	                               dec_ctx->in_bufferdatatype == CCX_PES);
+
+	if (!skip_fts_final_restore) {
+		// Restore the value (only for elementary streams)
+		dec_ctx->timing->fts_now = store_fts_now;
+	}
 
 	// Now that we are done, clean up.
 	init_hdcc(dec_ctx);

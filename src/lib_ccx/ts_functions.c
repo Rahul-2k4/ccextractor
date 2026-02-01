@@ -909,137 +909,145 @@ int64_t ts_readstream(struct ccx_demuxer *ctx, struct demuxer_data **data)
 				// we find the index of the packet PID in the have_PIDs array
 				int pid_index;
 				for (int i = 0; i < ctx->num_of_PIDs; i++)
+				{
 					if (payload.pid == ctx->have_PIDs[i])
+					{
 						pid_index = i;
-				ctx->stream_id_of_each_pid[pid_index] = pes_stream_id;
-				if (pts < ctx->min_pts[pid_index])
-					ctx->min_pts[pid_index] = pts; // and add its packet pts
-			}
-		}
-
-		if (payload.pid == 8191) // Null packet
-			continue;
-		if (payload.pid == 1003 && !ctx->hauppauge_warning_shown && !ccx_options.hauppauge_mode)
-		{
-			// TODO: Change this very weak test for something more decent such as size.
-			mprint("\n\nNote: This TS could be a recording from a Hauppage card. If no captions are detected, try --hauppauge\n\n");
-			ctx->hauppauge_warning_shown = 1;
-		}
-
-		if (ccx_options.hauppauge_mode && payload.pid == HAUPPAGE_CCPID)
-		{
-			// Haup packets processed separately, because we can't mix payloads. So they go in their own buffer
-			// copy payload to capbuf
-			int haup_newcapbuflen = haup_capbuflen + payload.length;
-			if (haup_newcapbuflen > haup_capbufsize)
-			{
-				unsigned char *new_haup_capbuf = (unsigned char *)realloc(haup_capbuf, haup_newcapbuflen);
-				if (!new_haup_capbuf)
-				{
-					free(haup_capbuf);
-					fatal(EXIT_NOT_ENOUGH_MEMORY, "Not enough memory to store hauppauge packets");
+						ctx->stream_id_of_each_pid[pid_index] = pes_stream_id;
+						// Only set min_pts for audio/video streams, NOT for caption streams
+						// This prevents early PTS values from overwriting caption timing
+						if (pts < ctx->min_pts[pid_index] && ctx->stream_id_of_each_pid[pid_index] != 0xbd)
+						{
+							ctx->min_pts[pid_index] = pts; // and add its packet pts
+						}
+					}
 				}
-				haup_capbuf = new_haup_capbuf;
-				haup_capbufsize = haup_newcapbuflen;
-			}
-			memcpy(haup_capbuf + haup_capbuflen, payload.start, payload.length);
-			haup_capbuflen = haup_newcapbuflen;
-		}
-
-		// Skip packets with no payload.  This also fixes the problems
-		// with the continuity counter not being incremented in empty
-		// packets.
-		if (!payload.length)
-		{
-			dbg_print(CCX_DMT_VERBOSE, "Packet (pid %u) skipped - no payload.\n",
-				  payload.pid);
-			continue;
-		}
-
-		cinfo = get_cinfo(ctx, payload.pid);
-		if (cinfo == NULL)
-		{
-			if (!packet_analysis_mode)
-				dbg_print(CCX_DMT_PARSE, "Packet (pid %u) skipped - no stream with captions identified yet.\n",
-					  payload.pid);
-			else
-				look_for_caption_data(ctx, &payload);
-			continue;
-		}
-		else if (cinfo->ignore == CCX_TRUE &&
-			 ((cinfo->stream != CCX_STREAM_TYPE_VIDEO_MPEG2 &&
-			   cinfo->stream != CCX_STREAM_TYPE_VIDEO_H264 &&
-			   cinfo->stream != CCX_STREAM_TYPE_VIDEO_HEVC) ||
-			  !ccx_options.analyze_video_stream))
-		{
-			if (cinfo->codec_private_data)
-			{
-				switch (cinfo->codec)
-				{
-					case CCX_CODEC_TELETEXT:
-						telxcc_close(&cinfo->codec_private_data, NULL);
-						break;
-					case CCX_CODEC_DVB:
-						dvbsub_close_decoder(&cinfo->codec_private_data);
-						break;
-					case CCX_CODEC_ISDB_CC:
-						delete_isdb_decoder(&cinfo->codec_private_data);
-					default:
-						break;
-				}
-				cinfo->codec_private_data = NULL;
 			}
 
-			if (cinfo->capbuflen > 0)
-			{
-				freep(&cinfo->capbuf);
-				cinfo->capbufsize = 0;
-				cinfo->capbuflen = 0;
-				delete_demuxer_data_node_by_pid(data, cinfo->pid);
-			}
-			continue;
-		}
-
-		// Video PES start
-		if (payload.pesstart)
-		{
-			cinfo->saw_pesstart = 1;
-			cinfo->prev_counter = payload.counter - 1;
-		}
-
-		// Discard packets when no pesstart was found.
-		if (!cinfo->saw_pesstart)
-			continue;
-
-		if ((cinfo->prev_counter == 15 ? 0 : cinfo->prev_counter + 1) != payload.counter)
-		{
-			mprint("TS continuity counter not incremented prev/curr %u/%u\n",
-			       cinfo->prev_counter, payload.counter);
-		}
-		cinfo->prev_counter = payload.counter;
-
-		// If the buffer is empty we just started this function
-		if (payload.pesstart && cinfo->capbuflen > 0)
-		{
-			dbg_print(CCX_DMT_PARSE, "\nPES finished (%ld bytes/%ld PES packets/%ld total packets)\n",
-				  cinfo->capbuflen, pespcount, pcount);
-
-			// Keep the data from capbuf to be worked on
-			ret = copy_capbuf_demux_data(ctx, data, cinfo);
-			cinfo->capbuflen = 0;
-			gotpes = 1;
-		}
-
-		copy_payload_to_capbuf(cinfo, &payload);
-		if (ret < 0)
-		{
-			if (errno == EINVAL)
+			if (payload.pid == 8191) // Null packet
 				continue;
-			else
-				break;
-		}
+			if (payload.pid == 1003 && !ctx->hauppauge_warning_shown && !ccx_options.hauppauge_mode)
+			{
+				// TODO: Change this very weak test for something more decent such as size.
+				mprint("\n\nNote: This TS could be a recording from a Hauppage card. If no captions are detected, try --hauppauge\n\n");
+				ctx->hauppauge_warning_shown = 1;
+			}
 
-		pespcount++;
+			if (ccx_options.hauppauge_mode && payload.pid == HAUPPAGE_CCPID)
+			{
+				// Haup packets processed separately, because we can't mix payloads. So they go in their own buffer
+				// copy payload to capbuf
+				int haup_newcapbuflen = haup_capbuflen + payload.length;
+				if (haup_newcapbuflen > haup_capbufsize)
+				{
+					unsigned char *new_haup_capbuf = (unsigned char *)realloc(haup_capbuf, haup_newcapbuflen);
+					if (!new_haup_capbuf)
+					{
+						free(haup_capbuf);
+						fatal(EXIT_NOT_ENOUGH_MEMORY, "Not enough memory to store hauppauge packets");
+					}
+					haup_capbuf = new_haup_capbuf;
+					haup_capbufsize = haup_newcapbuflen;
+				}
+				memcpy(haup_capbuf + haup_capbuflen, payload.start, payload.length);
+				haup_capbuflen = haup_newcapbuflen;
+			}
+
+			// Skip packets with no payload.  This also fixes the problems
+			// with the continuity counter not being incremented in empty
+			// packets.
+			if (!payload.length)
+			{
+				dbg_print(CCX_DMT_VERBOSE, "Packet (pid %u) skipped - no payload.\n",
+					  payload.pid);
+				continue;
+			}
+
+			cinfo = get_cinfo(ctx, payload.pid);
+			if (cinfo == NULL)
+			{
+				if (!packet_analysis_mode)
+					dbg_print(CCX_DMT_PARSE, "Packet (pid %u) skipped - no stream with captions identified yet.\n",
+						  payload.pid);
+				else
+					look_for_caption_data(ctx, &payload);
+				continue;
+			}
+			else if (cinfo->ignore == CCX_TRUE &&
+				 ((cinfo->stream != CCX_STREAM_TYPE_VIDEO_MPEG2 &&
+				   cinfo->stream != CCX_STREAM_TYPE_VIDEO_H264 &&
+				   cinfo->stream != CCX_STREAM_TYPE_VIDEO_HEVC) ||
+				  !ccx_options.analyze_video_stream))
+			{
+				if (cinfo->codec_private_data)
+				{
+					switch (cinfo->codec)
+					{
+						case CCX_CODEC_TELETEXT:
+							telxcc_close(&cinfo->codec_private_data, NULL);
+							break;
+						case CCX_CODEC_DVB:
+							dvbsub_close_decoder(&cinfo->codec_private_data);
+							break;
+						case CCX_CODEC_ISDB_CC:
+							delete_isdb_decoder(&cinfo->codec_private_data);
+						default:
+							break;
+					}
+					cinfo->codec_private_data = NULL;
+				}
+
+				if (cinfo->capbuflen > 0)
+				{
+					freep(&cinfo->capbuf);
+					cinfo->capbufsize = 0;
+					cinfo->capbuflen = 0;
+					delete_demuxer_data_node_by_pid(data, cinfo->pid);
+				}
+				continue;
+			}
+
+			// Video PES start
+			if (payload.pesstart)
+			{
+				cinfo->saw_pesstart = 1;
+				cinfo->prev_counter = payload.counter - 1;
+			}
+
+			// Discard packets when no pesstart was found.
+			if (!cinfo->saw_pesstart)
+				continue;
+
+			if ((cinfo->prev_counter == 15 ? 0 : cinfo->prev_counter + 1) != payload.counter)
+			{
+				mprint("TS continuity counter not incremented prev/curr %u/%u\n",
+				       cinfo->prev_counter, payload.counter);
+			}
+			cinfo->prev_counter = payload.counter;
+
+			// If the buffer is empty we just started this function
+			if (payload.pesstart && cinfo->capbuflen > 0)
+			{
+				dbg_print(CCX_DMT_PARSE, "\nPES finished (%ld bytes/%ld PES packets/%ld total packets)\n",
+					  cinfo->capbuflen, pespcount, pcount);
+
+				// Keep the data from capbuf to be worked on
+				ret = copy_capbuf_demux_data(ctx, data, cinfo);
+				cinfo->capbuflen = 0;
+				gotpes = 1;
+			}
+
+			copy_payload_to_capbuf(cinfo, &payload);
+			if (ret < 0)
+			{
+				if (errno == EINVAL)
+					continue;
+				else
+					break;
+			}
+
+			pespcount++;
+		}
 	} while (!gotpes); // gotpes==1 never arrives here because of the breaks
 
 	for (int i = 0; i < ctx->nb_program; i++)
@@ -1062,8 +1070,8 @@ int64_t ts_readstream(struct ccx_demuxer *ctx, struct demuxer_data **data)
 								if (ctx->min_pts[j] < pinfo->got_important_streams_min_pts[AUDIO])
 									pinfo->got_important_streams_min_pts[AUDIO] = ctx->min_pts[j];
 							if (ctx->stream_id_of_each_pid[j] >= 0xe0 && ctx->stream_id_of_each_pid[j] <= 0xef)
-								if (ctx->min_pts[j] < pinfo->got_important_streams_min_pts[VIDEO])
-									pinfo->got_important_streams_min_pts[VIDEO] = ctx->min_pts[j];
+							if (ctx->min_pts[j] < pinfo->got_important_streams_min_pts[VIDEO])
+								pinfo->got_important_streams_min_pts[VIDEO] = ctx->min_pts[j];
 							if (pinfo->got_important_streams_min_pts[PRIVATE_STREAM_1] != UINT64_MAX &&
 							    pinfo->got_important_streams_min_pts[AUDIO] != UINT64_MAX &&
 							    pinfo->got_important_streams_min_pts[VIDEO] != UINT64_MAX)

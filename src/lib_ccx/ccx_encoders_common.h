@@ -222,6 +222,8 @@ void dinit_encoder(struct encoder_ctx **arg, LLONG current_fts);
  */
 int encode_sub(struct encoder_ctx *ctx, struct cc_subtitle *sub);
 
+void try_to_add_start_credits(struct encoder_ctx *context, LLONG start_ms);
+
 int write_cc_buffer_as_ccd(const struct eia608_screen *data, struct encoder_ctx *context);
 int write_cc_buffer_as_scc(const struct eia608_screen *data, struct encoder_ctx *context);
 int write_cc_buffer_as_srt(struct eia608_screen *data, struct encoder_ctx *context);

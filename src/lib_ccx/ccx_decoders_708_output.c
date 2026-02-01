@@ -620,6 +620,13 @@ void dtvcc_write_scc(dtvcc_writer_ctx *writer, dtvcc_service_decoder *decoder, s
 
 void dtvcc_write(dtvcc_writer_ctx *writer, dtvcc_service_decoder *decoder, struct encoder_ctx *encoder)
 {
+	if (!encoder->startcredits_displayed && encoder->start_credits_text != NULL)
+	{
+		LLONG start_ms = decoder->tv->time_ms_show + encoder->subs_delay;
+		if (start_ms >= 0)
+			try_to_add_start_credits(encoder, start_ms);
+	}
+
 	switch (encoder->write_format)
 	{
 		case CCX_OF_NULL:

@@ -492,7 +492,7 @@ void flush_cc_decode(struct lib_cc_decode *ctx, struct cc_subtitle *sub)
 	if (ccxr_dtvcc_is_active(ctx->dtvcc_rust))
 	{
 		ctx->current_field = 3;
-		ccxr_flush_active_decoders(ctx->dtvcc_rust);
+		ccxr_flush_active_decoders(ctx->dtvcc_rust, ctx->timing);
 	}
 #else
 	if (ctx->dtvcc->is_active)

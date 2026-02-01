@@ -1209,7 +1209,6 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 				break;
 			}
 		}
-
 		if ((*dec_ctx)->codec == CCX_CODEC_TELETEXT) // even if there's no sub data, we still need to set the min_pts
 		{
 			if (ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[PRIVATE_STREAM_1] != UINT64_MAX) // Teletext is synced with subtitle packet PTS
@@ -1237,6 +1236,33 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 				set_fts((*dec_ctx)->timing);
 			}
 		}
+		// ATSC_CC (CEA-608/708): Use VIDEO stream's min_pts for correct timing
+		// CEA-708 captions are embedded in video stream and must sync with video PTS
+		// This prevents fts_now from becoming 0 when captions arrive
+		if ((*dec_ctx)->codec == CCX_CODEC_ATSC_CC)
+		{
+			fprintf(stderr, "DEBUG ATSC_CC: VIDEO min_pts=%llu, AUDIO min_pts=%llu\n",
+				(unsigned long long)ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO],
+				(unsigned long long)ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[AUDIO]);
+			if (ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO] != UINT64_MAX)
+			{
+				*min_pts = ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO];
+				set_current_pts((*dec_ctx)->timing, *min_pts);
+				// For ATSC_CC, directly set min_pts to video PTS to ensure correct timing
+				if ((*dec_ctx)->timing->min_pts == 0x01FFFFFFFFLL)
+				{
+					(*dec_ctx)->timing->min_pts = *min_pts;
+					(*dec_ctx)->timing->pts_set = 2; // MinPtsSet
+					(*dec_ctx)->timing->sync_pts = *min_pts;
+				}
+				set_fts((*dec_ctx)->timing);
+				fprintf(stderr, "DEBUG ATSC_CC: Set min_pts from VIDEO = %llu\n", (unsigned long long)*min_pts);
+			}
+			else
+			{
+				fprintf(stderr, "DEBUG ATSC_CC: VIDEO min_pts is UINT64_MAX, using fallback\n");
+			}
+		}
 	}
 
 	if (*enc_ctx)
@@ -1244,6 +1270,9 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 
 	if (*data_node) // no sub data, no need to process non-existing data
 	{
+		fprintf(stderr, "DEBUG: codec=%d, min_pts=%llx, pts=%llx, pts_set=%d\n",
+			(*dec_ctx)->codec, (unsigned long long)(*dec_ctx)->timing->min_pts,
+			(unsigned long long)(*data_node)->pts, (*dec_ctx)->timing->pts_set);
 		if ((*data_node)->pts != CCX_NOPTS)
 		{
 			struct ccx_rational tb = {1, MPEG_CLOCK_FREQ};
@@ -1255,13 +1284,15 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 			else
 				pts = (*data_node)->pts;
 			set_current_pts((*dec_ctx)->timing, pts);
-			// For DVB subtitles, use the first subtitle PTS as min_pts if audio hasn't been seen yet
-			if ((*dec_ctx)->codec == CCX_CODEC_DVB && (*dec_ctx)->timing->min_pts == 0x01FFFFFFFFLL)
+			if ((*dec_ctx)->codec == CCX_CODEC_DVB &&
+			    (*dec_ctx)->timing->min_pts == 0x01FFFFFFFFLL)
 			{
+				// DVB: Use caption PTS as min_pts (captions are separate stream)
 				(*dec_ctx)->timing->min_pts = pts;
-				(*dec_ctx)->timing->pts_set = 2; // MinPtsSet
+				(*dec_ctx)->timing->pts_set = 2;
 				(*dec_ctx)->timing->sync_pts = pts;
 			}
+
 			set_fts((*dec_ctx)->timing);
 		}
 

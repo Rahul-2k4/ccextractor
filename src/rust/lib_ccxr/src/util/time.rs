@@ -30,6 +30,19 @@ pub fn millis_to_date(
 }
 
 /// Rust equivalent for `stringztoms` function in C. Uses Rust-native types as input and output.
+/// Parses both HH:MM:SS format and plain milliseconds (e.g., "5000" for 5 seconds).
 pub fn stringztoms(s: &str) -> Option<Timestamp> {
-    Timestamp::parse_optional_hhmmss_from_str(s).ok()
+    // First try HH:MM:SS format
+    if let Ok(ts) = Timestamp::parse_optional_hhmmss_from_str(s) {
+        return Some(ts);
+    }
+    
+    // If that fails, try parsing as plain milliseconds
+    if let Ok(millis) = s.parse::<i64>() {
+        if millis >= 0 {
+            return Some(Timestamp::from_millis(millis));
+        }
+    }
+    
+    None
 }

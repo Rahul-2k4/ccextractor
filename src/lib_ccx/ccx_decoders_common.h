@@ -35,7 +35,7 @@ void free_subtitle(struct cc_subtitle *sub);
 
 #ifndef DISABLE_RUST
 // Rust FFI function to flush active CEA-708 service decoders
-extern void ccxr_flush_active_decoders(void *dtvcc_rust);
+extern void ccxr_flush_active_decoders(void *dtvcc_rust, void *timing);
 #endif
 
 #endif

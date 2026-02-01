@@ -343,13 +343,22 @@ pub extern "C" fn ccxr_dtvcc_process_data(
 ///
 /// # Safety
 /// - `dtvcc_ptr` must be a valid pointer returned by `ccxr_dtvcc_init()`
+/// - `timing_ptr` must be a valid pointer to current ccx_common_timing_ctx
 /// - It is safe to call with a null pointer (no-op)
 #[no_mangle]
-pub extern "C" fn ccxr_flush_active_decoders(dtvcc_ptr: *mut std::ffi::c_void) {
+pub extern "C" fn ccxr_flush_active_decoders(
+    dtvcc_ptr: *mut std::ffi::c_void,
+    timing_ptr: *mut ccx_common_timing_ctx,
+) {
     if dtvcc_ptr.is_null() {
         return;
     }
     let dtvcc = unsafe { &mut *(dtvcc_ptr as *mut DtvccRust) };
+    // CRITICAL FIX: Update timing pointer before flush, similar to ccxr_process_cc_data
+    // The timing context may have changed due to copy_decoder_context
+    if !timing_ptr.is_null() {
+        dtvcc.timing = timing_ptr;
+    }
     dtvcc.flush_active_decoders();
 }
 
@@ -400,7 +409,13 @@ extern "C" fn ccxr_process_cc_data(
     cc_count: c_int,
 ) -> c_int {
     // Null pointer and bounds checks
-    if dec_ctx.is_null() || data.is_null() || cc_count <= 0 {
+    if dec_ctx.is_null() {
+        return -1;
+    }
+    if data.is_null() {
+        return -1;
+    }
+    if cc_count <= 0 {
         return -1;
     }
 
@@ -424,6 +439,15 @@ extern "C" fn ccxr_process_cc_data(
         return ret;
     }
     let dtvcc = unsafe { &mut *dtvcc_rust };
+
+    // CRITICAL FIX: Update timing pointer from C context
+    // The timing context may change when copy_decoder_context is called,
+    // so we must always use the current timing from dec_ctx, not the stale
+    // cached pointer from initialization. This fixes the CEA-708 timing bug
+    // where subtitles showed 00:00:00 instead of correct timestamps.
+    if !dec_ctx.timing.is_null() {
+        dtvcc.timing = dec_ctx.timing;
+    }
 
     for cc_block in cc_data.chunks_exact_mut(3) {
         if !validate_cc_pair(cc_block) {
