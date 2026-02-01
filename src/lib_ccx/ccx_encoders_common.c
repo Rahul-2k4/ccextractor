@@ -726,6 +726,8 @@ void dinit_encoder(struct encoder_ctx **arg, LLONG current_fts)
 	dinit_output_ctx(ctx);
 	freep(&ctx->subline);
 	freep(&ctx->buffer);
+	freep(&ctx->start_credits_text);
+	freep(&ctx->end_credits_text);
 	ctx->capacity = 0;
 	freep(arg);
 }
@@ -816,8 +818,8 @@ struct encoder_ctx *init_encoder(struct encoder_cfg *opt)
 		return NULL;
 	}
 
-	ctx->start_credits_text = opt->start_credits_text;
-	ctx->end_credits_text = opt->end_credits_text;
+	ctx->start_credits_text = opt->start_credits_text ? strdup(opt->start_credits_text) : NULL;
+	ctx->end_credits_text = opt->end_credits_text ? strdup(opt->end_credits_text) : NULL;
 	ctx->startcreditsnotbefore = opt->startcreditsnotbefore;
 	ctx->startcreditsnotafter = opt->startcreditsnotafter;
 	ctx->startcreditsforatleast = opt->startcreditsforatleast;

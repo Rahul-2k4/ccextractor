@@ -96,6 +96,13 @@ void process_hdcc(struct encoder_ctx *enc_ctx, struct lib_cc_decode *dec_ctx, st
 	LLONG store_fts_now = dec_ctx->timing->fts_now;
 	int reset_cb = -1;
 
+	// DEBUG: Check first 50 sequences
+	for (int i = 0; i < 50; i++) {
+		if (dec_ctx->cc_data_count[i] > 0) {
+			mprint("DEBUG: seq=%d has %d captions, fts=%lld\n", i, dec_ctx->cc_data_count[i], (long long)dec_ctx->cc_fts[i]);
+		}
+	}
+
 	dbg_print(CCX_DMT_VERBOSE, "Flush HD caption blocks\n");
 
 	for (int seq = 0; seq < SORTBUF; seq++)
@@ -141,6 +148,8 @@ void process_hdcc(struct encoder_ctx *enc_ctx, struct lib_cc_decode *dec_ctx, st
 		}
 
 		// Re-create original time
+		mprint("DEBUG sequencing: Restoring fts_now from %lld to %lld (seq=%d)\n", 
+			(long long)dec_ctx->timing->fts_now, (long long)dec_ctx->cc_fts[seq], seq);
 		dec_ctx->timing->fts_now = dec_ctx->cc_fts[seq];
 		process_cc_data(enc_ctx, dec_ctx, dec_ctx->cc_data_pkts[seq], dec_ctx->cc_data_count[seq], sub);
 	}

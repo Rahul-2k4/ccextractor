@@ -74,7 +74,6 @@ impl dtvcc_tv_screen {
                     .to_str()
                     .map_err(|err| err.to_string())
             }?;
-            debug!("dtvcc_writer_output: creating {filename}");
             let file = File::create(filename).map_err(|err| err.to_string())?;
             writer.writer_ctx.fd = file.into_raw_fd();
 

@@ -360,6 +360,8 @@ void dtvcc_window_update_time_show(dtvcc_window *window, struct ccx_common_timin
 {
 	char buf[128];
 	window->time_ms_show = get_visible_start(timing, 3);
+	fprintf(stderr, "DEBUG CEA-708: get_visible_start returned %lld ms (fts_now=%lld, min_pts=%lld)\n",
+		window->time_ms_show, timing->fts_now, timing->min_pts);
 	print_mstime_buff(window->time_ms_show, "%02u:%02u:%02u:%03u", buf);
 	ccx_common_logging.debug_ftn(CCX_DMT_708, "[CEA-708] "
 						  "[W-%d] show time updated to %s\n",

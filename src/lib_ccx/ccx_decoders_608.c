@@ -238,7 +238,11 @@ void write_char(const unsigned char c, ccx_decoder_608_context *context)
 			// Don't set start time if we're in a transition from pop-on to roll-up
 			// In this case, start time will be set when CR causes scrolling
 			if (MODE_POPON != context->mode && !context->rollup_from_popon)
+			{
 				context->current_visible_start_ms = get_visible_start(context->timing, context->my_field);
+				fprintf(stderr, "DEBUG write_char: Set current_visible_start_ms=%lld (mode=%d)\n",
+					context->current_visible_start_ms, context->mode);
+			}
 		}
 		use_buffer->empty = 0;
 
@@ -876,11 +880,12 @@ void handle_command(unsigned char c1, const unsigned char c2, ccx_decoder_608_co
 			// time. Time to actually write it to file.
 			// For pop-on captions, current_visible_start_ms might not be set yet
 			// (write_char skips setting it for MODE_POPON). Set it now if needed.
-			// Only set timing for FIRST pop-on caption (when screenfuls_counter == 0)
-			if (context->screenfuls_counter == 0 && context->current_visible_start_ms == 0)
+			if (context->current_visible_start_ms == 0)
 			{
-				context->current_visible_start_ms = get_visible_start(context->timing, context->my_field);
-				ccx_common_logging.log_ftn("[FIX DEBUG] Set current_visible_start_ms to %lld\n", context->current_visible_start_ms);
+				LLONG start_ms = get_visible_start(context->timing, context->my_field);
+				fprintf(stderr, "DEBUG COM_ENDOFCAPTION: get_visible_start returned %lld (min_pts=%lld)\n",
+					start_ms, context->timing->min_pts);
+				context->current_visible_start_ms = start_ms;
 			}
 			if (write_cc_buffer(context, sub))
 				context->screenfuls_counter++;
