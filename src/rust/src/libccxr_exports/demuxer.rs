@@ -196,6 +196,10 @@ pub unsafe fn copy_demuxer_from_rust_to_c(c_demuxer: *mut ccx_demuxer, rust_demu
     let min_pts_len = rust_demuxer.min_pts.len().min(8192);
     c.min_pts[..min_pts_len].copy_from_slice(&rust_demuxer.min_pts[..min_pts_len]);
 
+    // First PTS array (CRITICAL: Track first PTS for correct timing)
+    let first_pts_len = rust_demuxer.first_pts.len().min(8192);
+    c.first_pts[..first_pts_len].copy_from_slice(&rust_demuxer.first_pts[..first_pts_len]);
+
     // Have PIDs array
     for (i, &val) in rust_demuxer.have_pids.iter().take(8192).enumerate() {
         c.have_PIDs[i] = val as c_int;
@@ -328,6 +332,7 @@ pub unsafe fn copy_demuxer_from_c_to_rust(ccx: *const ccx_demuxer) -> CcxDemuxer
     let pids_seen = Vec::from(&c.PIDs_seen[..]);
     let stream_id_of_each_pid = Vec::from(&c.stream_id_of_each_pid[..]);
     let min_pts = Vec::from(&c.min_pts[..]);
+    let first_pts = Vec::from(&c.first_pts[..]);
     let have_pids = Vec::from(&c.have_PIDs[..]);
     let num_of_pids = c.num_of_PIDs;
     // Reports and warnings
@@ -387,6 +392,7 @@ pub unsafe fn copy_demuxer_from_c_to_rust(ccx: *const ccx_demuxer) -> CcxDemuxer
         pids_seen,
         stream_id_of_each_pid,
         min_pts,
+        first_pts,
         have_pids,
         num_of_pids,
         pids_programs,

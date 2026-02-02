@@ -44,6 +44,9 @@ pub struct TimingContext {
     /// Tracks the minimum PTS seen while waiting for frame type determination.
     /// Used for H.264 streams where frame types are never set.
     pending_min_pts: MpegClockTick,
+    /// Tracks the first PTS seen (not minimum). Used for H.264 fallback to avoid
+    /// using reordered B-frame PTS as reference.
+    first_pts: MpegClockTick,
     /// Counts set_fts() calls with unknown frame type. Used to trigger fallback for H.264.
     unknown_frame_count: u32,
     pub current_pts: MpegClockTick,
@@ -114,6 +117,7 @@ impl TimingContext {
             min_pts_adjusted: false,
             seen_known_frame_type: false,
             pending_min_pts: MpegClockTick::new(0x01FFFFFFFF),
+            first_pts: MpegClockTick::new(0x01FFFFFFFF),
             unknown_frame_count: 0,
             current_pts: MpegClockTick::new(0),
             current_picture_coding_type: FrameType::ResetOrUnknown,
@@ -266,6 +270,14 @@ impl TimingContext {
             if self.current_pts < self.pending_min_pts {
                 self.pending_min_pts = self.current_pts;
             }
+
+            // Track the first PTS seen (not minimum, just first).
+            // For container formats, the first frame's PTS is the correct reference point.
+            // Later B-frames may have lower PTS due to display order reordering.
+            if self.first_pts.as_i64() == 0x01FFFFFFFF {
+                self.first_pts = self.current_pts;
+            }
+
             if is_frame_type_unknown {
                 self.unknown_frame_count += 1;
             }
@@ -284,17 +296,24 @@ impl TimingContext {
             // - Fallback: If we've processed many frames without seeing a known frame type
             //   (H.264 in MPEG-PS), eventually use pending_min_pts after 100+ calls.
             const FALLBACK_THRESHOLD: u32 = 100;
-            // Threshold for garbage detection: ~100ms (3 frames at 30fps)
+            // Threshold for garbage detection: ~500ms (15 frames at 30fps)
             // Gap larger than this suggests garbage leading frames from truncated GOP
-            const GARBAGE_GAP_THRESHOLD_MS: i64 = 100;
+            // Increased from 100ms to handle H.264 streams where B-frame PTS can be
+            // significantly earlier than I-frame PTS due to temporal reordering
+            const GARBAGE_GAP_THRESHOLD_MS: i64 = 500;
             let (allow_min_pts_set, pts_for_min) = if is_frame_type_unknown {
                 // Frame type unknown - check if we should use fallback
                 if self.unknown_frame_count >= FALLBACK_THRESHOLD
                     && !self.seen_known_frame_type
-                    && self.pending_min_pts.as_i64() != 0x01FFFFFFFF
+                    && self.first_pts.as_i64() != 0x01FFFFFFFF
                 {
-                    // H.264 fallback: Use pending_min_pts after threshold
-                    (true, self.pending_min_pts)
+                    // H.264 fallback: Use FIRST PTS (not minimum)
+                    // This avoids using reordered B-frame PTS as reference.
+                    // For container formats (TS/MP4/MKV), frames are presented in decode order
+                    // with reliable PTS. The FIRST frame's PTS is the correct reference point.
+                    // Later B-frames may have lower PTS due to display order reordering, but
+                    // they're not garbage - they're just reordered.
+                    (true, self.first_pts)
                 } else {
                     (false, self.current_pts)
                 }
@@ -556,6 +575,7 @@ impl TimingContext {
         min_pts_adjusted: bool,
         seen_known_frame_type: bool,
         pending_min_pts: MpegClockTick,
+        first_pts: MpegClockTick,
         unknown_frame_count: u32,
         current_pts: MpegClockTick,
         current_picture_coding_type: FrameType,
@@ -578,6 +598,7 @@ impl TimingContext {
             min_pts_adjusted,
             seen_known_frame_type,
             pending_min_pts,
+            first_pts,
             unknown_frame_count,
             current_pts,
             current_picture_coding_type,
@@ -610,6 +631,7 @@ impl TimingContext {
         bool,
         bool,
         MpegClockTick,
+        MpegClockTick,
         u32,
         MpegClockTick,
         FrameType,
@@ -632,6 +654,7 @@ impl TimingContext {
             min_pts_adjusted,
             seen_known_frame_type,
             pending_min_pts,
+            first_pts,
             unknown_frame_count,
             current_pts,
             current_picture_coding_type,
@@ -655,6 +678,7 @@ impl TimingContext {
             min_pts_adjusted,
             seen_known_frame_type,
             pending_min_pts,
+            first_pts,
             unknown_frame_count,
             current_pts,
             current_picture_coding_type,

@@ -767,6 +767,7 @@ impl CType<ccx_common_timing_ctx> for CommonTimingCtx {
             min_pts_adjusted: self.min_pts_adjusted,
             seen_known_frame_type: self.seen_known_frame_type,
             pending_min_pts: self.pending_min_pts,
+            first_pts: self.first_pts,
             unknown_frame_count: self.unknown_frame_count,
             current_pts: self.current_pts,
             current_picture_coding_type: self.current_picture_coding_type as _,
@@ -1065,6 +1066,17 @@ impl CType<program_info> for ProgramInfo {
         {
             min_pts_c[i] = val;
         }
+        
+        // Copy got_important_streams_first_pts (up to 3 entries only)
+        let mut first_pts_c: [u64; 3] = [0; 3];
+        for (i, &val) in self
+            .got_important_streams_first_pts
+            .iter()
+            .take(3)
+            .enumerate()
+        {
+            first_pts_c[i] = val;
+        }
 
         program_info {
             pid: self.pid,
@@ -1079,6 +1091,7 @@ impl CType<program_info> for ProgramInfo {
             name: name_c,
             pcr_pid: self.pcr_pid,
             got_important_streams_min_pts: min_pts_c,
+            got_important_streams_first_pts: first_pts_c,
             has_all_min_pts: self.has_all_min_pts as c_int,
             virtual_channel: [0; 16],
         }

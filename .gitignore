@@ -166,3 +166,6 @@ plans/
 tess.log
 **/tess.log
 ut=srt*
+
+# Agent context files (local development only)
+.agent/

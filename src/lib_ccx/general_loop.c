@@ -1236,17 +1236,26 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 				set_fts((*dec_ctx)->timing);
 			}
 		}
-		// ATSC_CC (CEA-608/708): Use VIDEO stream's min_pts for correct timing
-		// CEA-708 captions are embedded in video stream and must sync with video PTS
-		// This prevents fts_now from becoming 0 when captions arrive
+		// ATSC_CC (CEA-608/708): Use VIDEO stream's PTS for correct timing
+		// CRITICAL FIX: Use FIRST video PTS, not MINIMUM (which can be from B-frames)
+		// B-frames have earlier PTS than I-frames due to display order reordering,
+		// causing ~500ms timing drift if minimum is used.
 		if ((*dec_ctx)->codec == CCX_CODEC_ATSC_CC)
 		{
-			fprintf(stderr, "DEBUG ATSC_CC: VIDEO min_pts=%llu, AUDIO min_pts=%llu\n",
-				(unsigned long long)ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO],
-				(unsigned long long)ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[AUDIO]);
-			if (ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO] != UINT64_MAX)
+			// Use first_pts if available, otherwise fall back to min_pts
+			uint64_t video_pts;
+			uint64_t video_first_pts = ctx->demux_ctx->pinfo[p_index].got_important_streams_first_pts[VIDEO];
+			uint64_t video_min_pts = ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO];
+			if (video_first_pts != UINT64_MAX)
+				video_pts = video_first_pts;
+			else if (video_min_pts != UINT64_MAX)
+				video_pts = video_min_pts;
+			else
+				video_pts = UINT64_MAX;
+			
+			if (video_pts != UINT64_MAX)
 			{
-				*min_pts = ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO];
+				*min_pts = video_pts;
 				set_current_pts((*dec_ctx)->timing, *min_pts);
 				// For ATSC_CC, directly set min_pts to video PTS to ensure correct timing
 				if ((*dec_ctx)->timing->min_pts == 0x01FFFFFFFFLL)
@@ -1256,11 +1265,6 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 					(*dec_ctx)->timing->sync_pts = *min_pts;
 				}
 				set_fts((*dec_ctx)->timing);
-				fprintf(stderr, "DEBUG ATSC_CC: Set min_pts from VIDEO = %llu\n", (unsigned long long)*min_pts);
-			}
-			else
-			{
-				fprintf(stderr, "DEBUG ATSC_CC: VIDEO min_pts is UINT64_MAX, using fallback\n");
 			}
 		}
 	}
@@ -1270,9 +1274,6 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 
 	if (*data_node) // no sub data, no need to process non-existing data
 	{
-		fprintf(stderr, "DEBUG: codec=%d, min_pts=%llx, pts=%llx, pts_set=%d\n",
-			(*dec_ctx)->codec, (unsigned long long)(*dec_ctx)->timing->min_pts,
-			(unsigned long long)(*data_node)->pts, (*dec_ctx)->timing->pts_set);
 		if ((*data_node)->pts != CCX_NOPTS)
 		{
 			struct ccx_rational tb = {1, MPEG_CLOCK_FREQ};

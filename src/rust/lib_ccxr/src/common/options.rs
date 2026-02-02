@@ -54,6 +54,7 @@ pub struct CommonTimingCtx {
     pub min_pts_adjusted: i32,      // 0 = No, 1=Yes (don't adjust again)
     pub seen_known_frame_type: i32, // 0 = No, 1 = Yes. Tracks if we've seen a frame with known type
     pub pending_min_pts: i64,       // Minimum PTS seen while waiting for frame type determination
+    pub first_pts: i64,             // First PTS seen (not minimum). Used for H.264 fallback
     pub unknown_frame_count: u32,   // Count of set_fts calls with unknown frame type
     pub current_pts: i64,
     pub current_picture_coding_type: FrameType,

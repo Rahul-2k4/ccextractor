@@ -89,6 +89,7 @@ impl FromCType<*const ccx_common_timing_ctx> for CommonTimingCtx {
             min_pts_adjusted: ctx.min_pts_adjusted,
             seen_known_frame_type: ctx.seen_known_frame_type,
             pending_min_pts: ctx.pending_min_pts,
+            first_pts: ctx.first_pts,
             unknown_frame_count: ctx.unknown_frame_count,
             current_pts: ctx.current_pts,
             current_picture_coding_type,
@@ -548,6 +549,7 @@ impl FromCType<program_info> for ProgramInfo {
             name: name_bytes,
             pcr_pid: info.pcr_pid,
             got_important_streams_min_pts: info.got_important_streams_min_pts,
+            got_important_streams_first_pts: info.got_important_streams_first_pts,
             has_all_min_pts: info.has_all_min_pts != 0,
         })
     }

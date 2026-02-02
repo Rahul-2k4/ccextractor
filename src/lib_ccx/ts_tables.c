@@ -84,6 +84,7 @@ int update_pinfo(struct ccx_demuxer *ctx, int pid, int program_number)
 	for (int i = 0; i < COUNT; i++)
 	{
 		ctx->pinfo[ctx->nb_program].got_important_streams_min_pts[i] = UINT64_MAX;
+		ctx->pinfo[ctx->nb_program].got_important_streams_first_pts[i] = UINT64_MAX;
 	}
 	ctx->nb_program++;
 

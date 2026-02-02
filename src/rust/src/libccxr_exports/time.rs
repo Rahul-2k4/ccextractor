@@ -149,6 +149,7 @@ unsafe fn generate_timing_context(ctx: *const ccx_common_timing_ctx) -> TimingCo
     let min_pts_adjusted = (*ctx).min_pts_adjusted != 0;
     let seen_known_frame_type = (*ctx).seen_known_frame_type != 0;
     let pending_min_pts = MpegClockTick::new((*ctx).pending_min_pts);
+    let first_pts = MpegClockTick::new((*ctx).first_pts);
     let unknown_frame_count = (*ctx).unknown_frame_count;
     let current_pts = MpegClockTick::new((*ctx).current_pts);
 
@@ -180,6 +181,7 @@ unsafe fn generate_timing_context(ctx: *const ccx_common_timing_ctx) -> TimingCo
         min_pts_adjusted,
         seen_known_frame_type,
         pending_min_pts,
+        first_pts,
         unknown_frame_count,
         current_pts,
         current_picture_coding_type,
@@ -215,6 +217,7 @@ unsafe fn write_back_to_common_timing_ctx(
         min_pts_adjusted,
         seen_known_frame_type,
         pending_min_pts,
+        first_pts,
         unknown_frame_count,
         current_pts,
         current_picture_coding_type,
@@ -242,6 +245,7 @@ unsafe fn write_back_to_common_timing_ctx(
     (*ctx).min_pts_adjusted = if min_pts_adjusted { 1 } else { 0 };
     (*ctx).seen_known_frame_type = if seen_known_frame_type { 1 } else { 0 };
     (*ctx).pending_min_pts = pending_min_pts.as_i64();
+    (*ctx).first_pts = first_pts.as_i64();
     (*ctx).unknown_frame_count = unknown_frame_count;
     (*ctx).current_pts = current_pts.as_i64();
 

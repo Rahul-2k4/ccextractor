@@ -920,6 +920,12 @@ int64_t ts_readstream(struct ccx_demuxer *ctx, struct demuxer_data **data)
 						{
 							ctx->min_pts[pid_index] = pts; // and add its packet pts
 						}
+						// Track FIRST PTS (not minimum) - used for correct timing reference
+						// B-frames may have lower PTS than I-frames due to display order reordering
+						if (ctx->first_pts[pid_index] == UINT64_MAX && ctx->stream_id_of_each_pid[pid_index] != 0xbd)
+						{
+							ctx->first_pts[pid_index] = pts;
+						}
 					}
 				}
 			}
@@ -1064,14 +1070,31 @@ int64_t ts_readstream(struct ccx_demuxer *ctx, struct demuxer_data **data)
 						if (ctx->min_pts[j] != UINT64_MAX)
 						{
 							if (ctx->stream_id_of_each_pid[j] == 0xbd)
+							{
 								if (ctx->min_pts[j] < pinfo->got_important_streams_min_pts[PRIVATE_STREAM_1])
 									pinfo->got_important_streams_min_pts[PRIVATE_STREAM_1] = ctx->min_pts[j];
+								if (pinfo->got_important_streams_first_pts[PRIVATE_STREAM_1] == UINT64_MAX &&
+								    ctx->first_pts[j] != UINT64_MAX)
+									pinfo->got_important_streams_first_pts[PRIVATE_STREAM_1] = ctx->first_pts[j];
+							}
 							if (ctx->stream_id_of_each_pid[j] >= 0xc0 && ctx->stream_id_of_each_pid[j] <= 0xdf)
+							{
 								if (ctx->min_pts[j] < pinfo->got_important_streams_min_pts[AUDIO])
 									pinfo->got_important_streams_min_pts[AUDIO] = ctx->min_pts[j];
+								if (pinfo->got_important_streams_first_pts[AUDIO] == UINT64_MAX &&
+								    ctx->first_pts[j] != UINT64_MAX)
+									pinfo->got_important_streams_first_pts[AUDIO] = ctx->first_pts[j];
+							}
 							if (ctx->stream_id_of_each_pid[j] >= 0xe0 && ctx->stream_id_of_each_pid[j] <= 0xef)
-							if (ctx->min_pts[j] < pinfo->got_important_streams_min_pts[VIDEO])
-								pinfo->got_important_streams_min_pts[VIDEO] = ctx->min_pts[j];
+							{
+								if (ctx->min_pts[j] < pinfo->got_important_streams_min_pts[VIDEO])
+									pinfo->got_important_streams_min_pts[VIDEO] = ctx->min_pts[j];
+								// CRITICAL: Track FIRST PTS (not minimum) for video
+								// This avoids B-frame minimum PTS causing timing drift
+								if (pinfo->got_important_streams_first_pts[VIDEO] == UINT64_MAX &&
+								    ctx->first_pts[j] != UINT64_MAX)
+									pinfo->got_important_streams_first_pts[VIDEO] = ctx->first_pts[j];
+							}
 							if (pinfo->got_important_streams_min_pts[PRIVATE_STREAM_1] != UINT64_MAX &&
 							    pinfo->got_important_streams_min_pts[AUDIO] != UINT64_MAX &&
 							    pinfo->got_important_streams_min_pts[VIDEO] != UINT64_MAX)

@@ -46,6 +46,7 @@ struct program_info
 	 */
 	int16_t pcr_pid;
 	uint64_t got_important_streams_min_pts[COUNT];
+	uint64_t got_important_streams_first_pts[COUNT];  // Track FIRST PTS (not minimum)
 	int has_all_min_pts;
 	char virtual_channel[16];  // Stores ATSC virtual channel like "2.1"
 };
@@ -124,6 +125,7 @@ struct ccx_demuxer
 
 	uint8_t stream_id_of_each_pid[MAX_PSI_PID + 1];
 	uint64_t min_pts[MAX_PSI_PID + 1];
+	uint64_t first_pts[MAX_PSI_PID + 1];  // Track FIRST PTS (not minimum) for correct timing
 	int have_PIDs[MAX_PSI_PID + 1];
 	int num_of_PIDs;
 

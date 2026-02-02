@@ -66,6 +66,7 @@ pub struct ProgramInfo {
      */
     pub pcr_pid: i16,
     pub got_important_streams_min_pts: [u64; DemuxerStreamType::Count as usize],
+    pub got_important_streams_first_pts: [u64; DemuxerStreamType::Count as usize],
     pub has_all_min_pts: bool,
 }
 
@@ -179,6 +180,7 @@ pub struct CcxDemuxer<'a> {
 
     pub stream_id_of_each_pid: Vec<u8>,
     pub min_pts: Vec<u64>,
+    pub first_pts: Vec<u64>,  // Track FIRST PTS (not minimum) for correct timing
     pub have_pids: Vec<i32>,
     pub num_of_pids: i32,
     pub pids_programs: Vec<*mut PMTEntry>,
@@ -246,6 +248,7 @@ impl Default for CcxDemuxer<'_> {
             pids_seen: vec![0; MAX_PID],
             stream_id_of_each_pid: vec![0; MAX_PSI_PID + 1],
             min_pts: vec![u64::MAX; MAX_PSI_PID + 1],
+            first_pts: vec![u64::MAX; MAX_PSI_PID + 1],
             have_pids: vec![-1; MAX_PSI_PID + 1],
             num_of_pids: 0,
             pids_programs: vec![null_mut(); MAX_PID],
@@ -315,6 +318,7 @@ impl Default for ProgramInfo {
             name: [0; MAX_PROGRAM_NAME_LEN],
             pcr_pid: -1,
             got_important_streams_min_pts: [0; DemuxerStreamType::Count as usize],
+            got_important_streams_first_pts: [u64::MAX; DemuxerStreamType::Count as usize],
             has_all_min_pts: false,
         }
     }
