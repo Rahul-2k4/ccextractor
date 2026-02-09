@@ -169,3 +169,5 @@ ut=srt*
 
 # Agent context files (local development only)
 .agent/
+.env.github
+.worktrees/
