@@ -1236,37 +1236,6 @@ int process_non_multiprogram_general_loop(struct lib_ccx_ctx *ctx,
 				set_fts((*dec_ctx)->timing);
 			}
 		}
-		// ATSC_CC (CEA-608/708): Use VIDEO stream's PTS for correct timing
-		// CRITICAL FIX: Use FIRST video PTS, not MINIMUM (which can be from B-frames)
-		// B-frames have earlier PTS than I-frames due to display order reordering,
-		// causing ~500ms timing drift if minimum is used.
-		if ((*dec_ctx)->codec == CCX_CODEC_ATSC_CC)
-		{
-			// Use first_pts if available, otherwise fall back to min_pts
-			uint64_t video_pts;
-			uint64_t video_first_pts = ctx->demux_ctx->pinfo[p_index].got_important_streams_first_pts[VIDEO];
-			uint64_t video_min_pts = ctx->demux_ctx->pinfo[p_index].got_important_streams_min_pts[VIDEO];
-			if (video_first_pts != UINT64_MAX)
-				video_pts = video_first_pts;
-			else if (video_min_pts != UINT64_MAX)
-				video_pts = video_min_pts;
-			else
-				video_pts = UINT64_MAX;
-			
-			if (video_pts != UINT64_MAX)
-			{
-				*min_pts = video_pts;
-				set_current_pts((*dec_ctx)->timing, *min_pts);
-				// For ATSC_CC, directly set min_pts to video PTS to ensure correct timing
-				if ((*dec_ctx)->timing->min_pts == 0x01FFFFFFFFLL)
-				{
-					(*dec_ctx)->timing->min_pts = *min_pts;
-					(*dec_ctx)->timing->pts_set = 2; // MinPtsSet
-					(*dec_ctx)->timing->sync_pts = *min_pts;
-				}
-				set_fts((*dec_ctx)->timing);
-			}
-		}
 	}
 
 	if (*enc_ctx)

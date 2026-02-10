@@ -1093,7 +1093,9 @@ int64_t ts_readstream(struct ccx_demuxer *ctx, struct demuxer_data **data)
 								// This avoids B-frame minimum PTS causing timing drift
 								if (pinfo->got_important_streams_first_pts[VIDEO] == UINT64_MAX &&
 								    ctx->first_pts[j] != UINT64_MAX)
+								{
 									pinfo->got_important_streams_first_pts[VIDEO] = ctx->first_pts[j];
+								}
 							}
 							if (pinfo->got_important_streams_min_pts[PRIVATE_STREAM_1] != UINT64_MAX &&
 							    pinfo->got_important_streams_min_pts[AUDIO] != UINT64_MAX &&

@@ -39,6 +39,8 @@ struct ccx_common_timing_ctx
 	LLONG pending_min_pts;		  // Minimum PTS seen while waiting for frame type determination
 	LLONG first_pts;		  // First PTS seen (not minimum). Used for H.264 fallback
 	unsigned int unknown_frame_count; // Count of set_fts calls with unknown frame type
+	LLONG first_large_gap_pts;	  // PTS when large gap (>100ms) first detected. Used for H.264 I-frame detection
+	int seen_large_gap;		  // 0 = No, 1 = Yes. Flag indicating large gap detected for H.264 fallback
 	LLONG current_pts;
 	enum ccx_frame_type current_picture_coding_type;
 	int current_tref; // Store temporal reference of current frame
