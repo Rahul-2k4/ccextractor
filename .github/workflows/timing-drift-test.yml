@@ -11,6 +11,7 @@ on:
 
 env:
   SAMPLE_HASH: c4dd893cb9d67be50f88bdbd2368111e16b9d1887741d66932ff2732969d9478
+  RUSTFLAGS: -Ctarget-feature=+crt-static
   VCPKG_DEFAULT_TRIPLET: x64-windows-static
   VCPKG_COMMIT: ab2977be50c702126336e5088f4836060733c899
 
@@ -199,9 +200,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/vcpkg/installed
-          key: vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('windows/vcpkg.json') }}
+          key: vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('windows/vcpkg.json') }}
           restore-keys: |
-            vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
 
       - name: Install vcpkg dependencies
         if: steps.vcpkg-installed-cache.outputs.cache-hit != 'true'
@@ -303,9 +304,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/vcpkg/installed
-          key: vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('windows/vcpkg.json') }}
+          key: vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('windows/vcpkg.json') }}
           restore-keys: |
-            vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_DEFAULT_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
 
       - name: Install vcpkg dependencies
         run: ${{ github.workspace }}/vcpkg/vcpkg.exe install --x-install-root ${{ github.workspace }}/vcpkg/installed/
