@@ -2,7 +2,7 @@ name: Build CCExtractor on Windows
 
 env:
   RUSTFLAGS: -Ctarget-feature=+crt-static
-  VCPKG_DEFAULT_TRIPLET: x64-windows-static
+  VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
   VCPKG_COMMIT: ab2977be50c702126336e5088f4836060733c899
 
 on:
