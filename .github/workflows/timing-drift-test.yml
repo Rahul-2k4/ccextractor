@@ -6,6 +6,7 @@ on:
     branches:
       - fix/ci-timing-tests-clean
       - 'feature/*timing*'
+      - 'ci/*timing*'
   workflow_dispatch:
 
 env:
