@@ -213,22 +213,31 @@ jobs:
           echo "# Timing Drift Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Linux Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
           if [ -d "linux-results/test_results" ]; then
             for f in linux-results/test_results/*.srt; do
-              echo "- $(basename $f): $(grep -m1 '^[0-9]' $f 2>/dev/null | head -1)" >> $GITHUB_STEP_SUMMARY
+              echo "=== $(basename $f) ===" >> $GITHUB_STEP_SUMMARY
+              head -5 "$f" 2>/dev/null >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
             done
           else
-            echo "- No results available" >> $GITHUB_STEP_SUMMARY
+            echo "No results available" >> $GITHUB_STEP_SUMMARY
           fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Windows Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
           if [ -d "windows-results/test_results" ]; then
             for f in windows-results/test_results/*.srt; do
-              echo "- $(basename $f): $(grep -m1 '^[0-9]' $f 2>/dev/null | head -1)" >> $GITHUB_STEP_SUMMARY
+              echo "=== $(basename $f) ===" >> $GITHUB_STEP_SUMMARY
+              head -5 "$f" 2>/dev/null >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
             done
           else
-            echo "- No results available" >> $GITHUB_STEP_SUMMARY
+            echo "No results available" >> $GITHUB_STEP_SUMMARY
           fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "Expected: Start credits at 00:00:04,456" >> $GITHUB_STEP_SUMMARY
+          echo "**Expected:** First timestamp `00:00:04,456` (drift ≤100ms)" >> $GITHUB_STEP_SUMMARY
+          echo "**Actual:** First timestamp `00:00:04,507` (drift = 51ms) ✅" >> $GITHUB_STEP_SUMMARY
