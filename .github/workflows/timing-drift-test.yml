@@ -11,7 +11,6 @@ on:
 
 env:
   SAMPLE_HASH: c4dd893cb9d67be50f88bdbd2368111e16b9d1887741d66932ff2732969d9478
-  RUSTFLAGS: -Ctarget-feature=+crt-static
   VCPKG_DEFAULT_TRIPLET: x64-windows-static
   VCPKG_COMMIT: ab2977be50c702126336e5088f4836060733c899
 
@@ -76,31 +75,22 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: Run Test 226 - Start Credits Text
-        id: test226
-        run: |
-          if [ -f "test_sample.ts" ]; then
-            ./linux/ccextractor test_sample.ts \
-              --startcreditstext "CCextractor Start crdit Testing" \
-              -o test_results/test226.srt 2>&1 | tee test226.log
-            echo "first_timestamp=$(grep -m1 '^[0-9]' test_results/test226.srt | head -1)" >> $GITHUB_OUTPUT
-          else
-            echo "Sample file not available - skipping test"
-            echo "first_timestamp=SKIPPED" >> $GITHUB_OUTPUT
-          fi
-        continue-on-error: true
-
-      - name: Run remaining tests (227-230)
+      - name: Run Test 226
         run: |
           mkdir -p test_results
           if [ -f "test_sample.ts" ]; then
-            # Test 227
+            ./linux/ccextractor test_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results/test226.srt
+            echo "=== First timestamp ==="
+            grep -m1 '^[0-9]' test_results/test226.srt | head -1
+          fi
+        continue-on-error: true
+
+      - name: Run Tests 227-230
+        run: |
+          if [ -f "test_sample.ts" ]; then
             ./linux/ccextractor test_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test227.srt
-            # Test 228
             ./linux/ccextractor test_sample.ts --startcreditsnotafter 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test228.srt
-            # Test 229
             ./linux/ccextractor test_sample.ts --startcreditsforatleast 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test229.srt
-            # Test 230
             ./linux/ccextractor test_sample.ts --startcreditsforatmost 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test230.srt
           fi
         continue-on-error: true
@@ -198,36 +188,25 @@ jobs:
           }
         continue-on-error: true
 
-      - name: Run Test 226 - Start Credits Text
-        id: test226_win
-        shell: pwsh
+      - name: Run Test 226
+        shell: cmd
         run: |
-          if (Test-Path "test_sample.ts") {
-            New-Item -ItemType Directory -Force -Path "test_results"
-            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results/test226.srt 2>&1 | Tee-Object -FilePath test226.log
-            $firstLine = Select-String -Path "test_results\test226.srt" -Pattern "^\d{2}:" | Select-Object -First 1
-            Write-Host "First timestamp: $firstLine"
-            echo "first_timestamp=$firstLine" >> $env:GITHUB_OUTPUT
-          } else {
-            Write-Host "Sample file not available - skipping test"
-            echo "first_timestamp=SKIPPED" >> $env:GITHUB_OUTPUT
-          }
+          if exist test_sample.ts (
+            mkdir test_results 2>nul
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results\test226.srt
+            type test_results\test226.srt | findstr /r "^[0-9][0-9]:"
+          )
         continue-on-error: true
 
-      - name: Run remaining tests (227-230)
-        shell: pwsh
+      - name: Run Tests 227-230
+        shell: cmd
         run: |
-          New-Item -ItemType Directory -Force -Path "test_results"
-          if (Test-Path "test_sample.ts") {
-            # Test 227
-            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test227.srt
-            # Test 228
-            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsnotafter 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test228.srt
-            # Test 229
-            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsforatleast 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test229.srt
-            # Test 230
-            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsforatmost 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test230.srt
-          }
+          if exist test_sample.ts (
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test227.srt
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_sample.ts --startcreditsnotafter 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test228.srt
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_sample.ts --startcreditsforatleast 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test229.srt
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_sample.ts --startcreditsforatmost 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test230.srt
+          )
         continue-on-error: true
 
       - name: Upload Windows results
