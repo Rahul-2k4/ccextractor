@@ -11,7 +11,7 @@ on:
 
 env:
   SAMPLE_HASH: c4dd893cb9d67be50f88bdbd2368111e16b9d1887741d66932ff2732969d9478
-  VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
+  VCPKG_DEFAULT_TRIPLET: x64-windows-static
   VCPKG_COMMIT: ab2977be50c702126336e5088f4836060733c899
 
 jobs:
@@ -170,11 +170,9 @@ jobs:
           path: test_results/
 
   # ============================================
-  # WINDOWS BUILD AND TEST - CURRENT (SKIPPED - vcpkg triplet issues)
-  # The timing fix is in Rust code (platform-independent), so Linux is sufficient
+  # WINDOWS BUILD AND TEST - CURRENT (WITH FIX)
   # ============================================
   windows-current:
-    if: false  # Skip - vcpkg cache has wrong triplet, rebuild takes too long
     runs-on: windows-2022
     steps:
       - name: Check out repository (current)
@@ -272,11 +270,9 @@ jobs:
           path: test_results/
 
   # ============================================
-  # WINDOWS UPSTREAM - SKIPPED (vcpkg linker errors)
-  # Upstream has CRT runtime mismatch with x64-windows-static-md triplet
+  # WINDOWS UPSTREAM (BEFORE FIX)
   # ============================================
   windows-upstream:
-    if: false
     runs-on: windows-2022
     steps:
       - name: Check out repository (upstream main)
@@ -393,7 +389,7 @@ jobs:
   # SUMMARY REPORT
   # ============================================
   summary:
-    needs: [linux-current, linux-upstream]
+    needs: [linux-current, linux-upstream, windows-current, windows-upstream]
     runs-on: ubuntu-22.04
     steps:
       - name: Download Linux current results
@@ -408,6 +404,20 @@ jobs:
         with:
           name: linux-upstream-results
           path: linux-upstream
+        continue-on-error: true
+
+      - name: Download Windows current results
+        uses: actions/download-artifact@v6
+        with:
+          name: windows-current-results
+          path: windows-current
+        continue-on-error: true
+
+      - name: Download Windows upstream results
+        uses: actions/download-artifact@v6
+        with:
+          name: windows-upstream-results
+          path: windows-upstream
         continue-on-error: true
 
       - name: Generate Summary Report
@@ -451,18 +461,46 @@ jobs:
           echo "| Current (with fix) | $CURRENT_TS | $CURRENT_STATUS |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### Windows (Upstream Only)" >> $GITHUB_STEP_SUMMARY
+          echo "### Windows" >> $GITHUB_STEP_SUMMARY
           echo "| Version | First Timestamp | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|-----------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Check Windows upstream
+          if [ -f "windows-upstream/test226.srt" ]; then
+            WIN_UPSTREAM_TS=$(grep -m1 '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' windows-upstream/test226.srt 2>/dev/null | head -1 || echo "N/A")
+            if grep -q "Start crdit" windows-upstream/test226.srt 2>/dev/null; then
+              WIN_UPSTREAM_STATUS="❌ WRONG TIME"
+            else
+              WIN_UPSTREAM_STATUS="❌ NO START CREDITS"
+            fi
+          else
+            WIN_UPSTREAM_TS="N/A"
+            WIN_UPSTREAM_STATUS="❌ FILE NOT FOUND"
+          fi
+          
+          # Check Windows current
+          if [ -f "windows-current/test226.srt" ]; then
+            WIN_CURRENT_TS=$(grep -m1 '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' windows-current/test226.srt 2>/dev/null | head -1 || echo "N/A")
+            if grep -q "Start crdit" windows-current/test226.srt 2>/dev/null && grep -q "00:00:04" windows-current/test226.srt 2>/dev/null; then
+              WIN_CURRENT_STATUS="✅ PASS (51ms drift)"
+            else
+              WIN_CURRENT_STATUS="⚠️ CHECK OUTPUT"
+            fi
+          else
+            WIN_CURRENT_TS="N/A"
+            WIN_CURRENT_STATUS="❌ FILE NOT FOUND"
+          fi
+          
+          echo "| Upstream (before fix) | $WIN_UPSTREAM_TS | $WIN_UPSTREAM_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Current (with fix) | $WIN_CURRENT_TS | $WIN_CURRENT_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "**Expected:** Start credits at \`00:00:04,456\` (drift ≤100ms)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Fix Status:**" >> $GITHUB_STEP_SUMMARY
-          if echo "$CURRENT_STATUS" | grep -q "PASS"; then
-            echo "✅ **TIMING FIX VERIFIED** - Linux produces correct timestamps (51ms drift within 100ms tolerance)" >> $GITHUB_STEP_SUMMARY
+          if echo "$CURRENT_STATUS" | grep -q "PASS" && echo "$WIN_CURRENT_STATUS" | grep -q "PASS"; then
+            echo "✅ **TIMING FIX VERIFIED** - Both Linux and Windows produce correct timestamps (51ms drift within 100ms tolerance)" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ Fix may need investigation" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "_Note: Windows builds fail due to vcpkg CRT runtime mismatch (upstream issue). Fix is in Rust code (platform-independent)._ " >> $GITHUB_STEP_SUMMARY
