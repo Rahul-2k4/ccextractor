@@ -1,0 +1,284 @@
+name: Timing Drift Test (226-230)
+
+# Only runs on this branch - safe to push without affecting upstream
+on:
+  push:
+    branches:
+      - fix/ci-timing-tests-clean
+      - 'feature/*timing*'
+  workflow_dispatch:
+
+env:
+  SAMPLE_HASH: c4dd893cb9d67be50f88bdbd2368111e16b9d1887741d66932ff2732969d9478
+  RUSTFLAGS: -Ctarget-feature=+crt-static
+  VCPKG_DEFAULT_TRIPLET: x64-windows-static
+  VCPKG_COMMIT: ab2977be50c702126336e5088f4836060733c899
+
+jobs:
+  # ============================================
+  # LINUX BUILD AND TEST
+  # ============================================
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libgpac-dev \
+            libtesseract-dev \
+            libleptonica-dev \
+            pkg-config
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build Linux binary
+        run: |
+          cd linux
+          ./autogen.sh
+          ./configure
+          make -j$(nproc)
+          
+      - name: Display Linux version
+        run: ./linux/ccextractor --version
+
+      - name: Download test sample
+        run: |
+          # Download sample from Sample Platform or use local
+          if [ ! -f "test_sample.ts" ]; then
+            curl -L -o test_sample.ts \
+              "https://sampleplatform.ccextractor.org/samples/${{ env.SAMPLE_HASH }}/download" || \
+            echo "Note: Sample download may require authentication. Place sample manually."
+          fi
+        continue-on-error: true
+
+      - name: Copy local sample (if available)
+        run: |
+          if [ -f "/home/runner/work/_temp/sample.ts" ]; then
+            cp /home/runner/work/_temp/sample.ts test_sample.ts
+          fi
+        continue-on-error: true
+
+      - name: Run Test 226 - Start Credits Text
+        id: test226
+        run: |
+          if [ -f "test_sample.ts" ]; then
+            ./linux/ccextractor test_sample.ts \
+              --startcreditstext "CCextractor Start crdit Testing" \
+              -o test_results/test226.srt 2>&1 | tee test226.log
+            echo "first_timestamp=$(grep -m1 '^[0-9]' test_results/test226.srt | head -1)" >> $GITHUB_OUTPUT
+          else
+            echo "Sample file not available - skipping test"
+            echo "first_timestamp=SKIPPED" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
+
+      - name: Run remaining tests (227-230)
+        run: |
+          mkdir -p test_results
+          if [ -f "test_sample.ts" ]; then
+            # Test 227
+            ./linux/ccextractor test_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test227.srt
+            # Test 228
+            ./linux/ccextractor test_sample.ts --startcreditsnotafter 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test228.srt
+            # Test 229
+            ./linux/ccextractor test_sample.ts --startcreditsforatleast 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test229.srt
+            # Test 230
+            ./linux/ccextractor test_sample.ts --startcreditsforatmost 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test230.srt
+          fi
+        continue-on-error: true
+
+      - name: Upload Linux results
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-test-results
+          path: |
+            test_results/
+            *.log
+
+  # ============================================
+  # WINDOWS BUILD AND TEST
+  # ============================================
+  windows:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@v2.0.0
+        with:
+          msbuild-architecture: x64
+
+      - name: Install gpac
+        run: choco install gpac --version 2.4.0 --no-progress
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        id: runvcpkg
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgJsonGlob: 'windows/vcpkg.json'
+
+      - name: Cache vcpkg installed packages
+        id: vcpkg-installed-cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/vcpkg/installed
+          key: vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('windows/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Install vcpkg dependencies
+        if: steps.vcpkg-installed-cache.outputs.cache-hit != 'true'
+        run: ${{ github.workspace }}/vcpkg/vcpkg.exe install --x-install-root ${{ github.workspace }}/vcpkg/installed/
+        working-directory: windows
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo build artifacts
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/windows/x86_64-pc-windows-msvc
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/rust/**/*.rs') }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Win 10 SDK
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build Windows binary
+        env:
+          LIBCLANG_PATH: "C:\\Program Files\\LLVM\\lib"
+          LLVM_CONFIG_PATH: "C:\\Program Files\\LLVM\\bin\\llvm-config"
+          BINDGEN_EXTRA_CLANG_ARGS: -fmsc-version=0
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+        run: msbuild ccextractor.sln /p:Configuration=Release-Full /p:Platform=x64
+        working-directory: ./windows
+
+      - name: Display Windows version
+        run: ./ccextractorwinfull.exe --version
+        working-directory: ./windows/x64/Release-Full
+
+      - name: Download test sample
+        shell: pwsh
+        run: |
+          # Try to download sample
+          try {
+            Invoke-WebRequest -Uri "https://sampleplatform.ccextractor.org/samples/${{ env.SAMPLE_HASH }}/download" -OutFile "test_sample.ts"
+            Write-Host "Sample downloaded successfully"
+          } catch {
+            Write-Host "Note: Sample download may require authentication."
+            Write-Host "The build verification is still valid even without running tests."
+          }
+        continue-on-error: true
+
+      - name: Run Test 226 - Start Credits Text
+        id: test226_win
+        shell: pwsh
+        run: |
+          if (Test-Path "test_sample.ts") {
+            New-Item -ItemType Directory -Force -Path "test_results"
+            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results/test226.srt 2>&1 | Tee-Object -FilePath test226.log
+            $firstLine = Select-String -Path "test_results\test226.srt" -Pattern "^\d{2}:" | Select-Object -First 1
+            Write-Host "First timestamp: $firstLine"
+            echo "first_timestamp=$firstLine" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Sample file not available - skipping test"
+            echo "first_timestamp=SKIPPED" >> $env:GITHUB_OUTPUT
+          }
+        continue-on-error: true
+
+      - name: Run remaining tests (227-230)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "test_results"
+          if (Test-Path "test_sample.ts") {
+            # Test 227
+            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test227.srt
+            # Test 228
+            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsnotafter 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test228.srt
+            # Test 229
+            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsforatleast 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test229.srt
+            # Test 230
+            & ".\windows\x64\Release-Full\ccextractorwinfull.exe" test_sample.ts --startcreditsforatmost 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test230.srt
+          }
+        continue-on-error: true
+
+      - name: Upload Windows results
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-test-results
+          path: |
+            test_results/
+            *.log
+
+  # ============================================
+  # SUMMARY REPORT
+  # ============================================
+  summary:
+    needs: [linux, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download Linux results
+        uses: actions/download-artifact@v6
+        with:
+          name: linux-test-results
+          path: linux-results
+        continue-on-error: true
+
+      - name: Download Windows results
+        uses: actions/download-artifact@v6
+        with:
+          name: windows-test-results
+          path: windows-results
+        continue-on-error: true
+
+      - name: Generate Summary Report
+        run: |
+          echo "# Timing Drift Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Linux Results" >> $GITHUB_STEP_SUMMARY
+          if [ -d "linux-results/test_results" ]; then
+            for f in linux-results/test_results/*.srt; do
+              echo "- $(basename $f): $(grep -m1 '^[0-9]' $f 2>/dev/null | head -1)" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "- No results available" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Windows Results" >> $GITHUB_STEP_SUMMARY
+          if [ -d "windows-results/test_results" ]; then
+            for f in windows-results/test_results/*.srt; do
+              echo "- $(basename $f): $(grep -m1 '^[0-9]' $f 2>/dev/null | head -1)" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "- No results available" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "Expected: Start credits at 00:00:04,456" >> $GITHUB_STEP_SUMMARY
