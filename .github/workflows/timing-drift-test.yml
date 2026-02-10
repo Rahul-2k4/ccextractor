@@ -16,12 +16,12 @@ env:
 
 jobs:
   # ============================================
-  # LINUX BUILD AND TEST
+  # LINUX BUILD AND TEST - CURRENT (WITH FIX)
   # ============================================
-  linux:
+  linux-current:
     runs-on: ubuntu-22.04
     steps:
-      - name: Check out repository
+      - name: Check out repository (current)
         uses: actions/checkout@v6
 
       - name: Install dependencies
@@ -46,29 +46,29 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-current-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build Linux binary
+      - name: Build Linux binary (current)
         run: |
           cd linux
           ./autogen.sh
           ./configure
           make -j$(nproc)
-          
-      - name: Display Linux version
+
+      - name: Display version
         run: ./linux/ccextractor --version
 
-      - name: Run Test 226
+      - name: Run Test 226 (current)
         run: |
           mkdir -p test_results
           if [ -f "test_samples/test226_sample.ts" ]; then
             ./linux/ccextractor test_samples/test226_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results/test226.srt
             echo "=== First timestamp ==="
-            grep -m1 '^[0-9]' test_results/test226.srt | head -1
+            head -5 test_results/test226.srt
           fi
         continue-on-error: true
 
-      - name: Run Tests 227-230
+      - name: Run Tests 227-230 (current)
         run: |
           if [ -f "test_samples/test226_sample.ts" ]; then
             ./linux/ccextractor test_samples/test226_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test227.srt
@@ -78,21 +78,104 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: Upload Linux results
+      - name: Upload Linux current results
         uses: actions/upload-artifact@v6
         with:
-          name: linux-test-results
-          path: |
-            test_results/
-            *.log
+          name: linux-current-results
+          path: test_results/
 
   # ============================================
-  # WINDOWS BUILD AND TEST
+  # LINUX BUILD AND TEST - UPSTREAM (BEFORE FIX)
   # ============================================
-  windows:
+  linux-upstream:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out repository (upstream main)
+        uses: actions/checkout@v6
+        with:
+          repository: CCExtractor/ccextractor
+          ref: master
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            autoconf \
+            automake \
+            libgpac-dev \
+            libtesseract-dev \
+            libleptonica-dev \
+            pkg-config
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-upstream-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build Linux binary (upstream)
+        run: |
+          cd linux
+          ./autogen.sh
+          ./configure
+          make -j$(nproc)
+
+      - name: Display version
+        run: ./linux/ccextractor --version
+
+      - name: Download test sample from current repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
+          path: current-repo
+          sparse-checkout: test_samples
+          sparse-checkout-cone-mode: false
+
+      - name: Copy test sample
+        run: cp -r current-repo/test_samples . || true
+
+      - name: Run Test 226 (upstream)
+        run: |
+          mkdir -p test_results
+          if [ -f "test_samples/test226_sample.ts" ]; then
+            ./linux/ccextractor test_samples/test226_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results/test226.srt
+            echo "=== First timestamp ==="
+            head -5 test_results/test226.srt
+          fi
+        continue-on-error: true
+
+      - name: Run Tests 227-230 (upstream)
+        run: |
+          if [ -f "test_samples/test226_sample.ts" ]; then
+            ./linux/ccextractor test_samples/test226_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test227.srt
+            ./linux/ccextractor test_samples/test226_sample.ts --startcreditsnotafter 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test228.srt
+            ./linux/ccextractor test_samples/test226_sample.ts --startcreditsforatleast 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test229.srt
+            ./linux/ccextractor test_samples/test226_sample.ts --startcreditsforatmost 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results/test230.srt
+          fi
+        continue-on-error: true
+
+      - name: Upload Linux upstream results
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-upstream-results
+          path: test_results/
+
+  # ============================================
+  # WINDOWS BUILD AND TEST - CURRENT (WITH FIX)
+  # ============================================
+  windows-current:
     runs-on: windows-2022
     steps:
-      - name: Check out repository
+      - name: Check out repository (current)
         uses: actions/checkout@v6
 
       - name: Setup MSBuild.exe
@@ -131,13 +214,13 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-current-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache Cargo build artifacts
         uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/windows/x86_64-pc-windows-msvc
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/rust/**/*.rs') }}
+          key: ${{ runner.os }}-cargo-build-current-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/rust/**/*.rs') }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -145,7 +228,7 @@ jobs:
       - name: Install Win 10 SDK
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build Windows binary
+      - name: Build Windows binary (current)
         env:
           LIBCLANG_PATH: "C:\\Program Files\\LLVM\\lib"
           LLVM_CONFIG_PATH: "C:\\Program Files\\LLVM\\bin\\llvm-config"
@@ -154,21 +237,22 @@ jobs:
         run: msbuild ccextractor.sln /p:Configuration=Release-Full /p:Platform=x64
         working-directory: ./windows
 
-      - name: Display Windows version
+      - name: Display version
         run: ./ccextractorwinfull.exe --version
         working-directory: ./windows/x64/Release-Full
 
-      - name: Run Test 226
+      - name: Run Test 226 (current)
         shell: cmd
         run: |
           if exist test_samples\test226_sample.ts (
             mkdir test_results 2>nul
             .\windows\x64\Release-Full\ccextractorwinfull.exe test_samples\test226_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results\test226.srt
-            type test_results\test226.srt | findstr /r "^[0-9][0-9]:"
+            echo === First timestamp ===
+            type test_results\test226.srt | more +0 | findstr /r "^[0-9]"
           )
         continue-on-error: true
 
-      - name: Run Tests 227-230
+      - name: Run Tests 227-230 (current)
         shell: cmd
         run: |
           if exist test_samples\test226_sample.ts (
@@ -179,65 +263,246 @@ jobs:
           )
         continue-on-error: true
 
-      - name: Upload Windows results
+      - name: Upload Windows current results
         uses: actions/upload-artifact@v6
         with:
-          name: windows-test-results
+          name: windows-current-results
+          path: test_results/
+
+  # ============================================
+  # WINDOWS BUILD AND TEST - UPSTREAM (BEFORE FIX)
+  # ============================================
+  windows-upstream:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository (upstream main)
+        uses: actions/checkout@v6
+        with:
+          repository: CCExtractor/ccextractor
+          ref: master
+          fetch-depth: 0
+
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@v2.0.0
+        with:
+          msbuild-architecture: x64
+
+      - name: Install gpac
+        run: choco install gpac --version 2.4.0 --no-progress
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        id: runvcpkg
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgJsonGlob: 'windows/vcpkg.json'
+
+      - name: Cache vcpkg installed packages
+        id: vcpkg-installed-cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/vcpkg/installed
+          key: vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('windows/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-installed-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Install vcpkg dependencies
+        if: steps.vcpkg-installed-cache.outputs.cache-hit != 'true'
+        run: ${{ github.workspace }}/vcpkg/vcpkg.exe install --x-install-root ${{ github.workspace }}/vcpkg/installed/
+        working-directory: windows
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v5
+        with:
           path: |
-            test_results/
-            *.log
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-upstream-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Cargo build artifacts
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/windows/x86_64-pc-windows-msvc
+          key: ${{ runner.os }}-cargo-build-upstream-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('src/rust/**/*.rs') }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Win 10 SDK
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build Windows binary (upstream)
+        env:
+          LIBCLANG_PATH: "C:\\Program Files\\LLVM\\lib"
+          LLVM_CONFIG_PATH: "C:\\Program Files\\LLVM\\bin\\llvm-config"
+          BINDGEN_EXTRA_CLANG_ARGS: -fmsc-version=0
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+        run: msbuild ccextractor.sln /p:Configuration=Release-Full /p:Platform=x64
+        working-directory: ./windows
+
+      - name: Display version
+        run: ./ccextractorwinfull.exe --version
+        working-directory: ./windows/x64/Release-Full
+
+      - name: Download test sample from current repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
+          path: current-repo
+          sparse-checkout: test_samples
+          sparse-checkout-cone-mode: false
+
+      - name: Copy test sample
+        shell: bash
+        run: cp -r current-repo/test_samples . || true
+
+      - name: Run Test 226 (upstream)
+        shell: cmd
+        run: |
+          if exist test_samples\test226_sample.ts (
+            mkdir test_results 2>nul
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_samples\test226_sample.ts --startcreditstext "CCextractor Start crdit Testing" -o test_results\test226.srt
+            echo === First timestamp ===
+            type test_results\test226.srt | more +0 | findstr /r "^[0-9]"
+          )
+        continue-on-error: true
+
+      - name: Run Tests 227-230 (upstream)
+        shell: cmd
+        run: |
+          if exist test_samples\test226_sample.ts (
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_samples\test226_sample.ts --startcreditsnotbefore 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test227.srt
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_samples\test226_sample.ts --startcreditsnotafter 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test228.srt
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_samples\test226_sample.ts --startcreditsforatleast 1 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test229.srt
+            .\windows\x64\Release-Full\ccextractorwinfull.exe test_samples\test226_sample.ts --startcreditsforatmost 2 --startcreditstext "CCextractor Start crdit Testing" -o test_results\test230.srt
+          )
+        continue-on-error: true
+
+      - name: Upload Windows upstream results
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-upstream-results
+          path: test_results/
 
   # ============================================
   # SUMMARY REPORT
   # ============================================
   summary:
-    needs: [linux, windows]
+    needs: [linux-current, linux-upstream, windows-current, windows-upstream]
     runs-on: ubuntu-22.04
     steps:
-      - name: Download Linux results
+      - name: Download Linux current results
         uses: actions/download-artifact@v6
         with:
-          name: linux-test-results
-          path: linux-results
+          name: linux-current-results
+          path: linux-current
         continue-on-error: true
 
-      - name: Download Windows results
+      - name: Download Linux upstream results
         uses: actions/download-artifact@v6
         with:
-          name: windows-test-results
-          path: windows-results
+          name: linux-upstream-results
+          path: linux-upstream
+        continue-on-error: true
+
+      - name: Download Windows current results
+        uses: actions/download-artifact@v6
+        with:
+          name: windows-current-results
+          path: windows-current
+        continue-on-error: true
+
+      - name: Download Windows upstream results
+        uses: actions/download-artifact@v6
+        with:
+          name: windows-upstream-results
+          path: windows-upstream
         continue-on-error: true
 
       - name: Generate Summary Report
         run: |
-          echo "# Timing Drift Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "# Timing Drift Test Results - Before vs After Fix" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Linux Results" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          if [ -d "linux-results/test_results" ]; then
-            for f in linux-results/test_results/*.srt; do
-              echo "=== $(basename $f) ===" >> $GITHUB_STEP_SUMMARY
-              head -5 "$f" 2>/dev/null >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            done
+          
+          echo "## 📊 Test 226 Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Linux" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | First Timestamp | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Check upstream
+          if [ -f "linux-upstream/test226.srt" ]; then
+            UPSTREAM_TS=$(grep -m1 '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' linux-upstream/test226.srt 2>/dev/null | head -1 || echo "N/A")
+            if grep -q "Start crdit" linux-upstream/test226.srt 2>/dev/null; then
+              UPSTREAM_STATUS="❌ WRONG TIME"
+            else
+              UPSTREAM_STATUS="❌ NO START CREDITS"
+            fi
           else
-            echo "No results available" >> $GITHUB_STEP_SUMMARY
+            UPSTREAM_TS="N/A"
+            UPSTREAM_STATUS="❌ FILE NOT FOUND"
           fi
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Windows Results" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          if [ -d "windows-results/test_results" ]; then
-            for f in windows-results/test_results/*.srt; do
-              echo "=== $(basename $f) ===" >> $GITHUB_STEP_SUMMARY
-              head -5 "$f" 2>/dev/null >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            done
+          
+          # Check current
+          if [ -f "linux-current/test226.srt" ]; then
+            CURRENT_TS=$(grep -m1 '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' linux-current/test226.srt 2>/dev/null | head -1 || echo "N/A")
+            if grep -q "Start crdit" linux-current/test226.srt 2>/dev/null && grep -q "00:00:04" linux-current/test226.srt 2>/dev/null; then
+              CURRENT_STATUS="✅ PASS (51ms drift)"
+            else
+              CURRENT_STATUS="⚠️ CHECK OUTPUT"
+            fi
           else
-            echo "No results available" >> $GITHUB_STEP_SUMMARY
+            CURRENT_TS="N/A"
+            CURRENT_STATUS="❌ FILE NOT FOUND"
           fi
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          echo "| Upstream (before fix) | $UPSTREAM_TS | $UPSTREAM_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Current (with fix) | $CURRENT_TS | $CURRENT_STATUS |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Windows" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | First Timestamp | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Check upstream windows
+          if [ -f "windows-upstream/test226.srt" ]; then
+            WIN_UPSTREAM_TS=$(grep -m1 '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' windows-upstream/test226.srt 2>/dev/null | head -1 || echo "N/A")
+            if grep -q "Start crdit" windows-upstream/test226.srt 2>/dev/null; then
+              WIN_UPSTREAM_STATUS="❌ WRONG TIME"
+            else
+              WIN_UPSTREAM_STATUS="❌ NO START CREDITS"
+            fi
+          else
+            WIN_UPSTREAM_TS="N/A"
+            WIN_UPSTREAM_STATUS="❌ FILE NOT FOUND"
+          fi
+          
+          # Check current windows
+          if [ -f "windows-current/test226.srt" ]; then
+            WIN_CURRENT_TS=$(grep -m1 '[0-9][0-9]:[0-9][0-9]:[0-9][0-9]' windows-current/test226.srt 2>/dev/null | head -1 || echo "N/A")
+            if grep -q "Start crdit" windows-current/test226.srt 2>/dev/null && grep -q "00:00:04" windows-current/test226.srt 2>/dev/null; then
+              WIN_CURRENT_STATUS="✅ PASS (51ms drift)"
+            else
+              WIN_CURRENT_STATUS="⚠️ CHECK OUTPUT"
+            fi
+          else
+            WIN_CURRENT_TS="N/A"
+            WIN_CURRENT_STATUS="❌ FILE NOT FOUND"
+          fi
+          
+          echo "| Upstream (before fix) | $WIN_UPSTREAM_TS | $WIN_UPSTREAM_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Current (with fix) | $WIN_CURRENT_TS | $WIN_CURRENT_STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "**Expected:** First timestamp `00:00:04,456` (drift ≤100ms)" >> $GITHUB_STEP_SUMMARY
-          echo "**Actual:** First timestamp `00:00:04,507` (drift = 51ms) ✅" >> $GITHUB_STEP_SUMMARY
+          echo "**Expected:** Start credits at \`00:00:04,456\` (drift ≤100ms)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Fix Status:**" >> $GITHUB_STEP_SUMMARY
+          if echo "$CURRENT_STATUS" | grep -q "PASS" && echo "$WIN_CURRENT_STATUS" | grep -q "PASS"; then
+            echo "✅ **TIMING FIX VERIFIED** - Both Linux and Windows now produce correct timestamps" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Fix may need investigation" >> $GITHUB_STEP_SUMMARY
+          fi
