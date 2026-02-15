@@ -422,7 +422,6 @@ jobs:
           path: windows-upstream
         continue-on-error: true
 
-
       - name: Generate Summary Report
         run: |
           echo "# Timing Drift Test Results - Before vs After Fix" >> $GITHUB_STEP_SUMMARY
@@ -431,42 +430,122 @@ jobs:
           # Function to extract first timestamp from SRT file
           extract_ts() {
             if [ -f "$1" ]; then
-              grep -m1 -oE '[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}' "$1" 2>/dev/null | head -1 || echo "N/A"
+              grep -m1 -oE '[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{3}' "$1" 2>/dev/null | head -1 || echo ""
             else
-              echo "N/A"
+              echo ""
             fi
           }
           
-          echo "## Test Results (Tests 226-230)" >> $GITHUB_STEP_SUMMARY
+          # Function to convert timestamp to milliseconds
+          ts_to_ms() {
+            local ts=$1
+            if [ -n "$ts" ]; then
+              IFS=',' read -r time millis <<< "$ts"
+              IFS=':' read -r hours minutes seconds <<< "$time"
+              echo $((hours*3600000 + minutes*60000 + seconds*1000 + millis))
+            else
+              echo ""
+            fi
+          }
+          
+          # Function to calculate drift
+          calc_drift() {
+            local expected=$1
+            local actual=$2
+            if [ -n "$expected" ] && [ -n "$actual" ]; then
+              echo $((actual - expected))
+            else
+              echo ""
+            fi
+          }
+          
+          # Function to format drift as +/-Xms
+          format_drift() {
+            local drift=$1
+            if [ -z "$drift" ]; then
+              echo "N/A"
+            elif [ "$drift" -lt 0 ]; then
+              echo "${drift}ms"
+            else
+              echo "+${drift}ms"
+            fi
+          }
+          
+          # Function to check if test passed (drift within 100ms tolerance)
+          test_passed() {
+            local drift=$1
+            if [ -z "$drift" ]; then
+              echo "❌ NO OUTPUT"
+            elif [ "${drift#-}" -le 100 ]; then
+              echo "✅ PASS"
+            else
+              echo "❌ FAIL"
+            fi
+          }
+          
+          # Expected timestamps for tests (from test requirements)
+          declare -A EXPECTED=(
+            ["226"]="00:00:04,456"
+            ["227"]="00:00:04,956"
+            ["228"]=""  # Test 228 should have NO start credits
+            ["229"]="00:00:04,456"
+            ["230"]="00:00:05,956"
+          )
+          
+          echo "## Linux Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Linux Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | Upstream (Before Fix) | Current (With Fix) |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|---------------------|------------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Expected | Actual (Upstream) | Drift | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|------------------|-------|--------|" >> $GITHUB_STEP_SUMMARY
           
           for test_num in 226 227 228 229 230; do
-            UP_TS=$(extract_ts "linux-upstream/test${test_num}.srt")
-            CUR_TS=$(extract_ts "linux-current/test${test_num}.srt")
-            echo "| Test ${test_num} | ${UP_TS} | ${CUR_TS} |" >> $GITHUB_STEP_SUMMARY
+            expected_ts=${EXPECTED[$test_num]}
+            actual_up=$(extract_ts "linux-upstream/test${test_num}.srt")
+            expected_ms=$(ts_to_ms "$expected_ts")
+            actual_up_ms=$(ts_to_ms "$actual_up")
+            drift=$(calc_drift "$expected_ms" "$actual_up_ms")
+            drift_fmt=$(format_drift "$drift")
+            
+            # Test 228 checks for ABSENCE of start credits
+            if [ "$test_num" == "228" ]; then
+              if [ -z "$actual_up" ]; then
+                echo "| Test ${test_num} | (no credits) | (no credits) | 0ms | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| Test ${test_num} | (no credits) | ${actual_up} | N/A | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              status=$(test_passed "$drift")
+              echo "| Test ${test_num} | ${expected_ts} | ${actual_up} | ${drift_fmt} | ${status} |" >> $GITHUB_STEP_SUMMARY
+            fi
           done
           
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Windows Results" >> $GITHUB_STEP_SUMMARY
+          echo "## Windows Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | Upstream (Before Fix) | Current (With Fix) |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|---------------------|------------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Expected | Actual (Current) | Drift | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|----------|-----------------|-------|--------|" >> $GITHUB_STEP_SUMMARY
           
           for test_num in 226 227 228 229 230; do
-            UP_TS=$(extract_ts "windows-upstream/test${test_num}.srt")
-            CUR_TS=$(extract_ts "windows-current/test${testNum}.srt")
-            echo "| Test ${test_num} | ${UP_TS} | ${CUR_TS} |" >> $GITHUB_STEP_SUMMARY
+            expected_ts=${EXPECTED[$test_num]}
+            actual_cur=$(extract_ts "windows-current/test${test_num}.srt")
+            expected_ms=$(ts_to_ms "$expected_ts")
+            actual_cur_ms=$(ts_to_ms "$actual_cur")
+            drift=$(calc_drift "$expected_ms" "$actual_cur_ms")
+            drift_fmt=$(format_drift "$drift")
+            
+            if [ "$test_num" == "228" ]; then
+              if [ -z "$actual_cur" ]; then
+                echo "| Test ${test_num} | (no credits) | (no credits) | 0ms | ✅ PASS |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| Test ${test_num} | (no credits) | ${actual_cur} | N/A | ❌ FAIL |" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              status=$(test_passed "$drift")
+              echo "| Test ${test_num} | ${expected_ts} | ${actual_cur} | ${drift_fmt} | ${status} |" >> $GITHUB_STEP_SUMMARY
+            fi
           done
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "**Note:** Timestamps extracted dynamically from actual test outputs. No hardcoded expected values." >> $GITHUB_STEP_SUMMARY
+          echo "**Validation:** Each test is compared against its expected timestamp. Tests pass if drift ≤ 100ms." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Context:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Upstream master: Contains known 8.9s timing drift bug" >> $GITHUB_STEP_SUMMARY  
-          echo "- Current branch: Timing drift fix applied (H264_GAP_THRESHOLD_MS=500ms + FFI serialization)" >> $GITHUB_STEP_SUMMARY
-
+          echo "**Test Oracle:** Expected timestamps are defined by test requirements (226-230)." >> $GITHUB_STEP_SUMMARY
