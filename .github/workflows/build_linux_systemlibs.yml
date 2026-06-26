@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   build-systemlibs:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +50,8 @@ jobs:
       - name: Install base dependencies
         if: steps.should_build.outputs.should_build == 'true'
         run: |
+          sudo rm -f /etc/apt/sources.list.d/azure-cli.list
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential \
