@@ -33,8 +33,6 @@ ARG USE_LOCAL_SOURCE=0
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
-ENV CARGO_NET_RETRY=5
-ENV CARGO_HTTP_MULTIPLEXING=false
 
 # Install base build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
